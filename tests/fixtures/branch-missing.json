@@ -1,0 +1,8 @@
+{
+  "schema_version": "1",
+  "fixture_id": "branch-missing",
+  "p": {"status": "branch_missing", "repository": null, "resources": [], "relations": []},
+  "m": {"status": "empty", "space_resolved": true, "resources": [], "relations": []},
+  "t": {"status": "empty", "documents": [], "relations": []},
+  "r": {"status": "empty", "documents": [], "relations": []}
+}

@@ -1,0 +1,16 @@
+schema_version: "1"
+projects:
+  - project_id: example-project
+    repositories:
+      - repo_id: example-repo
+        default_branch: main
+        authoritative_location_id: remote-main
+        adr_paths: [docs/adr]
+        locations:
+          - location_id: remote-main
+            kind: github
+            role: authoritative
+            remote: https://example.invalid/owner/repository
+            state: unknown
+            snapshots: []
+        workspaces: []

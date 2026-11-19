@@ -1,0 +1,32 @@
+schema_version: "1"
+rule_version: v1
+terminal:
+  on_empty: return_empty
+  on_unavailable: return_empty
+optional_r:
+  position: append
+  operation: vault_view_search
+intents:
+  project_context:
+    steps:
+      - {store: P, operation: project_read}
+      - {store: M, operation: knowledge_search}
+      - {store: T, operation: vault_view_search}
+  general_knowledge:
+    steps:
+      - {store: M, operation: knowledge_search}
+      - {store: T, operation: vault_view_search}
+  method_skill:
+    steps:
+      - {store: M, operation: knowledge_search}
+      - {store: T, operation: vault_view_search}
+  decision_history:
+    steps:
+      - {store: P, operation: adr_search}
+      - {store: T, operation: vault_view_search}
+      - {store: M, operation: knowledge_search}
+  cold_detail:
+    implicit_r: true
+    steps:
+      - {store: R, operation: vault_view_search}
+      - {store: T, operation: vault_view_search}

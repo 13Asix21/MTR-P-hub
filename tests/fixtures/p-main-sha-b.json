@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "fixture_id": "p-main-sha-b",
+  "p": {
+    "status": "ready",
+    "repository": {"project_id": "example-project", "repo_id": "example-repo", "location_id": "remote-main", "ref": "main", "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+    "resources": [
+      {"project_id": "example-project", "repo_id": "example-repo", "location_id": "remote-main", "ref": "main", "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "path": "README.md", "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "title": "README at SHA B"}
+    ],
+    "relations": []
+  },
+  "m": {"status": "empty", "space_resolved": true, "resources": [], "relations": []},
+  "t": {"status": "empty", "documents": [], "relations": []},
+  "r": {"status": "empty", "documents": [], "relations": []}
+}

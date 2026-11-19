@@ -1,0 +1,46 @@
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*
+*secret*
+
+# Trusted local registry configuration (examples remain tracked)
+config/stores.yaml
+config/projects.yaml
+
+# Runtime audit data and local state
+**/.mtrp/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+logs/
+
+# Python environments, caches, and build outputs
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Editors and temporary products
+.idea/
+.vscode/
+*.tmp
+*.temp
+*.bak
+*~
+.DS_Store
+.workbuddy/

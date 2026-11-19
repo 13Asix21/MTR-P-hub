@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "fixture_id": "p-main-sha-a",
+  "p": {
+    "status": "ready",
+    "repository": {"project_id": "example-project", "repo_id": "example-repo", "location_id": "remote-main", "ref": "main", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "resources": [
+      {"project_id": "example-project", "repo_id": "example-repo", "location_id": "remote-main", "ref": "main", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "path": "README.md", "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "title": "README at SHA A"}
+    ],
+    "relations": []
+  },
+  "m": {"status": "empty", "space_resolved": true, "resources": [], "relations": []},
+  "t": {"status": "empty", "documents": [], "relations": []},
+  "r": {"status": "empty", "documents": [], "relations": []}
+}

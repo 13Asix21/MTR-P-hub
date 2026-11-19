@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "fixture_id": "r-empty",
+  "p": {"status": "empty", "repository": null, "resources": [], "relations": []},
+  "m": {"status": "empty", "space_resolved": true, "resources": [], "relations": []},
+  "t": {
+    "status": "ready",
+    "documents": [
+      {
+        "path": "2-Permanent/notes/trial-after-rare.md",
+        "raw_markdown": "---\ntitle: Trial After Rare\ntags: [mtr/trial]\n---\nTrial fallback body.\n"
+      }
+    ],
+    "relations": []
+  },
+  "r": {"status": "empty", "documents": [], "relations": []}
+}

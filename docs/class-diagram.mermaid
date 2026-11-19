@@ -1,0 +1,336 @@
+classDiagram
+direction LR
+
+class Intent {
+  <<enumeration>>
+  project_context
+  general_knowledge
+  method_skill
+  decision_history
+  cold_detail
+}
+
+class StoreKind {
+  <<enumeration>>
+  P
+  M
+  T
+  R
+}
+
+class RouteQueryRequest {
+  +query: str
+  +intent: Intent
+  +project_id: Optional[str]
+  +repo_id: Optional[str]
+  +workspace_id: Optional[str]
+  +config_dir: BootstrapPath
+  +fixture: Optional[BootstrapPath]
+  +include_r: bool
+  +format: OutputFormat
+}
+
+class SourceRef {
+  +store: StoreKind
+  +store_id: str
+  +logical_key: str
+}
+
+class SnapshotRef {
+  +kind: SnapshotKind
+  +value: str
+}
+
+class ProjectCoordinate {
+  +project_id: str
+  +repo_id: str
+  +location_id: str
+  +location_kind: LocationKind
+  +ref: str
+  +commit: Optional[str]
+  +path: Optional[RelativePath]
+  +workspace_id: Optional[str]
+  +repository_state: RepositoryState
+  +validate_identity() void
+}
+
+class Resource {
+  +resource_id: str
+  +resource_type: ResourceType
+  +title: str
+  +content_ref: str
+  +source_ref: SourceRef
+  +snapshot_ref: Optional[SnapshotRef]
+  +project_coordinate: Optional[ProjectCoordinate]
+  +evidence_ids: Tuple~str~
+}
+
+class Relation {
+  +relation_id: str
+  +relation_type: str
+  +from_resource_id: str
+  +to_resource_id: str
+  +evidence_ids: Tuple~str~
+}
+
+class Evidence {
+  +evidence_id: str
+  +source_ref: SourceRef
+  +snapshot_ref: Optional[SnapshotRef]
+  +project_coordinate: Optional[ProjectCoordinate]
+  +path: Optional[RelativePath]
+  +entry_id: Optional[str]
+  +content_sha256: Optional[str]
+  +request_hash: str
+  +plan_hash: str
+  +step_id: str
+}
+
+class CanonicalResult {
+  +resources: Tuple~Resource~
+  +relations: Tuple~Relation~
+  +evidence: Tuple~Evidence~
+  +validate_references() void
+}
+
+class ReadStep {
+  +step_id: str
+  +store: StoreKind
+  +store_id: str
+  +operation: ReadOperation
+  +view_tag: Optional[str]
+  +coordinate: Optional[ProjectCoordinate]
+  +on_empty: EmptyAction
+  +on_unavailable: EmptyAction
+  +read_only: bool
+}
+
+class ReadPlan {
+  +schema_version: str
+  +intent: Intent
+  +rule_version: str
+  +policy_hash: str
+  +registry_hash: str
+  +request_hash: str
+  +plan_hash: str
+  +include_r: bool
+  +read_only: bool
+  +data_mode: str
+  +project_coordinate: Optional[ProjectCoordinate]
+  +steps: Tuple~ReadStep~
+  +write_proposal: None
+}
+
+class WriteProposal {
+  +proposal_id: str
+  +target: ProjectCoordinate
+  +operation: ProposalOperation
+  +reason: str
+  +base_snapshot: Optional[SnapshotRef]
+  +status: ProposalStatus
+  +approval_required: bool
+  +executable: bool
+  +validate_non_executable() void
+}
+
+class StepResult {
+  +step_id: str
+  +store: StoreKind
+  +status: StepStatus
+  +reason_code: Optional[ReasonCode]
+  +coordinate: Optional[ProjectCoordinate]
+  +resource_ids: Tuple~str~
+  +evidence_ids: Tuple~str~
+  +next_step_id: Optional[str]
+}
+
+class StepExecution {
+  +step_result: StepResult
+  +resources: Tuple~Resource~
+  +relations: Tuple~Relation~
+  +evidence: Tuple~Evidence~
+}
+
+class RouteQueryResponse {
+  +plan: ReadPlan
+  +fixture_id: str
+  +fixture_hash: str
+  +step_results: Tuple~StepResult~
+  +result: CanonicalResult
+  +write_proposal: None
+}
+
+class StoreDefinition {
+  +store_id: str
+  +kind: StoreKind
+  +adapter: str
+  +read_only: bool
+  +vault_id: Optional[str]
+  +view_tag: Optional[str]
+}
+
+class StoreRegistry {
+  +stores: Tuple~StoreDefinition~
+  +get(kind: StoreKind) StoreDefinition
+  +fingerprint() str
+}
+
+class Location {
+  +location_id: str
+  +kind: LocationKind
+  +role: LocationRole
+  +remote: Optional[str]
+  +state: RepositoryState
+  +snapshots: Tuple~SnapshotPin~
+}
+
+class Workspace {
+  +workspace_id: str
+  +location_id: str
+  +root_path: str
+}
+
+class Repository {
+  +repo_id: str
+  +default_branch: str
+  +authoritative_location_id: str
+  +adr_paths: Tuple~RelativePath~
+  +locations: Tuple~Location~
+  +workspaces: Tuple~Workspace~
+}
+
+class Project {
+  +project_id: str
+  +repositories: Tuple~Repository~
+}
+
+class ProjectRegistry {
+  +projects: Tuple~Project~
+  +resolve_default(project_id: str, repo_id: str) ProjectCoordinate
+  +resolve_workspace(project_id: str, repo_id: str, workspace_id: str) ProjectCoordinate
+  +fingerprint() str
+}
+
+class RoutingPolicy {
+  +schema_version: str
+  +rule_version: str
+  +intents: IntentRules
+  +optional_r: OptionalRRule
+}
+
+class ReadPolicy {
+  +create_plan(request: RouteQueryRequest, coordinate: Optional~ProjectCoordinate~, stores: StoreRegistry, projects: ProjectRegistry) ReadPlan
+  -materialize_steps(intent: Intent, include_r: bool) Tuple~ReadStep~
+  -set_terminal_actions(steps: Tuple~ReadStep~) Tuple~ReadStep~
+}
+
+class RequestAccessGuard {
+  +validate_bootstrap(request: RouteQueryRequest) void
+  +validate_lexical_coordinates(request: RouteQueryRequest) void
+  +validate_registry_coordinate(coordinate: ProjectCoordinate) AccessDecision
+}
+
+class AccessDecision {
+  +request_hash: str
+  +coordinate: Optional~ProjectCoordinate~
+  +data_mode: str
+  +network: str
+  +target_filesystem: str
+}
+
+class ConfigLoader {
+  +load(config_dir: BootstrapPath) LoadedConfig
+}
+
+class FixtureBundle {
+  +schema_version: str
+  +fixture_id: str
+  +p: PFixture
+  +m: MFixture
+  +t: ViewFixture
+  +r: ViewFixture
+}
+
+class FixtureLoader {
+  +load(path: Optional~BootstrapPath~) FixtureBundle
+}
+
+class ReadOnlyAdapter {
+  <<interface>>
+  +execute(step: ReadStep, fixture: FixtureBundle, context: FakeExecutionContext) StepExecution
+}
+
+class FakeAdapter {
+  +kind: StoreKind
+  +execute(step: ReadStep, fixture: FixtureBundle, context: FakeExecutionContext) StepExecution
+}
+
+class DecisionRecord {
+  +event_type: DecisionEventType
+  +request_hash: str
+  +plan_hash: Optional[str]
+  +status: str
+  +reason_code: Optional[str]
+  +payload: DecisionPayload
+}
+
+class DecisionLog {
+  <<interface>>
+  +append(record: DecisionRecord) void
+  +find(request_hash: Optional~str~, plan_hash: Optional~str~) Tuple~DecisionRecord~
+}
+
+class SQLiteDecisionLog {
+  +append(record: DecisionRecord) void
+  +find(request_hash: Optional~str~, plan_hash: Optional~str~) Tuple~DecisionRecord~
+}
+
+class RouteQueryService {
+  +query(request: RouteQueryRequest) RouteQueryResponse
+}
+
+RouteQueryRequest --> Intent
+Resource --> SourceRef
+Resource --> SnapshotRef
+Resource --> ProjectCoordinate
+Evidence --> ProjectCoordinate
+Relation "many" --> "many" Evidence : evidence_ids
+StepExecution *-- StepResult
+StepExecution *-- Resource
+StepExecution *-- Relation
+StepExecution *-- Evidence
+CanonicalResult *-- Resource
+CanonicalResult *-- Relation
+CanonicalResult *-- Evidence
+ReadPlan *-- ReadStep
+ReadPlan --> ProjectCoordinate
+ReadStep --> ProjectCoordinate
+ReadStep --> StoreKind
+RouteQueryResponse *-- ReadPlan
+RouteQueryResponse *-- StepResult
+RouteQueryResponse *-- CanonicalResult
+WriteProposal --> ProjectCoordinate
+WriteProposal --> SnapshotRef
+Project *-- Repository
+Repository *-- Location
+Repository *-- Workspace
+ProjectRegistry o-- Project
+StoreRegistry o-- StoreDefinition
+ReadPolicy --> RoutingPolicy
+ReadPolicy ..> ReadPlan : creates
+ReadPolicy --> StoreRegistry
+ReadPolicy --> ProjectRegistry
+RequestAccessGuard ..> AccessDecision : creates
+FakeAdapter ..|> ReadOnlyAdapter
+FakeAdapter --> FixtureBundle
+FakeAdapter ..> StepExecution : creates
+SQLiteDecisionLog ..|> DecisionLog
+RouteQueryService --> RequestAccessGuard
+RouteQueryService --> ConfigLoader
+RouteQueryService --> StoreRegistry
+RouteQueryService --> ProjectRegistry
+RouteQueryService --> ReadPolicy
+RouteQueryService --> FixtureLoader
+RouteQueryService --> ReadOnlyAdapter
+RouteQueryService --> DecisionLog
+RouteQueryService ..> RouteQueryResponse : creates

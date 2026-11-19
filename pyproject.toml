@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mtrp-hub"
+version = "0.1.0"
+description = "Deterministic read-only MTR-P routing baseline with fake adapters"
+readme = {text = "MTR-P Hub stage 0+1 safe routing baseline.", content-type = "text/plain"}
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.10,<3",
+  "typer>=0.12,<1",
+  "ruamel.yaml>=0.18,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "pytest-cov>=5,<7",
+]
+
+[project.scripts]
+mtrp = "mtrp_hub.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mtrp_hub*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "security: access-boundary and no-external-call regression tests",
+]

@@ -1,0 +1,75 @@
+sequenceDiagram
+autonumber
+actor U as 调用方
+participant C as Typer CLI
+participant S as RouteQueryService
+participant G as RequestAccessGuard
+participant DL as SQLiteDecisionLog
+participant CL as ConfigLoader
+participant SR as StoreRegistry
+participant PR as ProjectRegistry
+participant RP as ReadPolicy
+participant FL as FixtureLoader
+participant FA as FakeAdapter
+participant CR as CanonicalResult
+
+U->>C: mtrp route query 参数
+C->>S: query(RouteQueryRequest)
+S->>G: validate_bootstrap(config_dir, fixture)
+G-->>S: 仅校验显式引导路径
+S->>DL: 打开 config_dir/.mtrp/decision-log.sqlite3
+S->>G: validate_lexical_coordinates(request)
+Note over G: 不读取 Workspace、Vault、URL、网络或 Fixture；query 文本只参与哈希
+
+alt 坐标 URL、绝对路径、路径逃逸或非法 ID
+  G-->>S: BoundaryError(exit=2)
+  S->>DL: append(REQUEST_REJECTED，仅安全字段)
+  S-->>C: 抛出 BoundaryError
+  C-->>U: stderr 安全诊断；stdout 为空；退出 2
+else 词法边界通过
+  S->>CL: load(config_dir)
+  CL-->>S: stores + projects + routing（已校验 DTO）
+  S->>SR: from_config(stores)
+  SR-->>S: 唯一 P/M/T/R、fake、read_only=true
+  S->>PR: from_config(projects)
+  PR-->>S: 项目/仓库/Location/Workspace 引用完整
+
+  opt intent 需要 P，或调用方提供项目坐标
+    S->>PR: resolve_default 或校验 workspace
+    alt 未登记项目、仓库、Location、Workspace
+      PR-->>S: BoundaryError(exit=2)
+      S->>DL: append(REQUEST_REJECTED)
+      S-->>C: 不加载 Fixture，不创建 Adapter
+      C-->>U: stderr；退出 2
+    else 坐标已登记
+      PR-->>S: ProjectCoordinate（commit 可为 None）
+      S->>G: validate_registry_coordinate(coordinate)
+      G-->>S: AccessDecision(fake, network=disabled, target_filesystem=disabled)
+      Note over S: 若显式选择 Workspace，本轮仍返回 WORKSPACE_QUERY_DISABLED；权威 P 坐标继续用于默认主路
+    end
+  end
+
+  S->>RP: create_plan(request, coordinate, registries)
+  RP-->>S: 冻结 ReadPlan + plan_hash
+  S->>DL: append(PLAN_CREATED)
+  S->>FL: load(已校验的显式 fixture 或全空 Fixture)
+  FL-->>S: FixtureBundle + fixture_hash
+  Note over FL: 这是除配置和自身日志外唯一允许的输入文件读取；不是目标 Workspace/Vault 访问
+
+  loop 按 ReadPlan.steps 顺序，绝不并行或重排
+    S->>FA: execute(step, fixture, FakeExecutionContext)
+    FA-->>S: StepExecution（StepResult + Resource/Relation/Evidence，仅内存）
+    alt M 空库、P 空仓、ADR 缺失或 Fake 只读故障
+      S->>DL: append(STEP_FINISHED，reason_code，next_step_id)
+      Note over S: 空结果按 on_empty 继续；不伪造 Resource/commit；最终以 0 返回
+    else 正常命中
+      S->>DL: append(STEP_FINISHED，resource_count)
+    end
+  end
+
+  S->>CR: 聚合并校验 Resource/Relation/Evidence 引用
+  CR-->>S: CanonicalResult
+  S->>DL: append(QUERY_FINISHED，fixture_hash，plan_hash)
+  S-->>C: RouteQueryResponse（无时间戳、日志序号、随机 ID）
+  C-->>U: 稳定 JSON 或 text；退出 0
+end
