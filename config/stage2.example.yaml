@@ -1,0 +1,50 @@
+schema_version: "1"
+obsidian:
+  mode: fixture
+  vault_id: fixture-vault
+  vault_root: tests/fixtures/stage2/vault
+  managed_roots:
+    - {root_id: permanent, path: 2-Permanent}
+  excluded_roots:
+    - 2-Permanent/Resources/MTR-P-System
+    - 2-Permanent/Areas/AI-Assets/_templates
+  trial_tag: mtr/trial
+  rarely_tag: mtr/rarely
+  read_only: true
+  follow_symlinks: false
+  g1_confirmed: false
+  max_file_bytes: 1048576
+  max_scan_files: 5000
+  max_results: 100
+lexiang_m:
+  mode: fixture
+  team_id: "00000000000000000000000000000000"
+  space_id: "00000000000000000000000000000000"
+  root_entry_id: "00000000000000000000000000000000"
+  read_only: true
+  allow_empty: true
+  search_modes: [text, vector]
+  max_results: 5
+  vector_threshold: 0.3
+  max_entry_bytes: 262144
+  timeout_seconds: 10
+github_p:
+  mode: fixture
+  read_only: true
+  timeout_seconds: 10
+  max_file_bytes: 1048576
+  repositories:
+    - project_id: example-project
+      repo_id: example-repo
+      location_id: remote-main
+      owner: example-owner
+      repo: example-repo
+      read_paths: [README.md]
+      adr_files: []
+workbuddy_manifest:
+  schema_version: "1"
+  tool_profile: stage2-readonly-v1
+  max_steps: 32
+  max_entry_reads: 10
+  max_envelope_bytes: 16777216
+  persist_raw_responses: false

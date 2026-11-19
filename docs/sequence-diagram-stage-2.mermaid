@@ -1,0 +1,110 @@
+sequenceDiagram
+autonumber
+actor U as 调用方
+participant CLI as Typer CLI
+participant MS as ManifestService
+participant G as RequestAccessGuard
+participant CL as ConfigLoader + Stage2ConfigLoader
+participant MC as ManifestCompiler
+participant MV as ManifestVerifier
+participant DL as Stage2DecisionLog
+participant WB as WorkBuddyManifestExecutor
+participant BR as BindingResolver
+participant TT as WorkBuddyToolTransport（宿主提供）
+participant QF as QueryFinalizationService
+participant OA as ObsidianAdapter
+participant IO as SafeVaultIO
+participant PA as ObsidianMarkdownParser
+participant NA as LexiangMAdapter / GitHubPAdapter
+participant CR as CanonicalResultV2
+
+U->>CLI: mtrp manifest create（原请求参数）
+CLI->>MS: create(request, mode)
+MS->>G: validate_bootstrap + validate_lexical_coordinates
+G-->>MS: 通过；尚无 Vault/网络目标访问
+MS->>CL: 读取显式 YAML，构建 Registry 与 Stage2RuntimeConfig
+CL-->>MS: 配置 DTO、逻辑 P 坐标、G1/审计位置校验
+MS->>MC: compile(request, v1 ReadPolicy 路由, config)
+MC-->>MS: Stage2RoutePlan + 完整有序 ExecutionManifest
+MS->>MV: verify_intrinsic(manifest)
+MV-->>MS: hash、profile、步骤、静态参数、绑定全部通过
+MS->>DL: record_plan(manifest)
+DL-->>MS: 仅安全 ID/hash/计数已写入
+MS-->>CLI: manifest（不含 trace_id；无时间/随机数）
+CLI-->>U: 稳定 JSON；未 stat/open Vault，未调用连接器
+
+U->>CLI: mtrp manifest verify（stdin=Manifest，原请求参数）
+CLI->>MS: verify(request, supplied_manifest)
+MS->>MC: 从当前请求与配置重编译 expected
+MS->>MV: verify_expected(supplied, expected)
+MV-->>MS: 全字段相等；重算 manifest_hash/execution_id/profile_hash
+MS-->>CLI: ManifestVerification
+CLI-->>U: 校验成功（不代表连接成功）
+
+U->>WB: execute(已验证 Manifest, continuation=None)
+WB->>MV: verify_before_call(manifest, expected_manifest_hash)
+MV-->>WB: 首次外部调用前通过
+WB-->>U: 初始 ExecutionEnvelope(next=首步，receipts=[])
+Note over WB,QF: 以下由 WorkBuddy 与 Core 交替推进；Manifest 和 step 顺序永不变
+
+loop 直到 schedule 完成
+  U->>WB: execute(manifest, 当前 envelope)
+  WB->>MV: 重验 hash、前缀、continuation_hash 和 profile
+  loop 从 next_step_id 到下一个 Core barrier/末尾
+    WB->>BR: resolve(step, prior_receipts)
+    alt 静态参数或前序绑定非法
+      BR-->>WB: REJECTED（Manifest 问题）或 DEGRADED（响应数据问题）
+      Note over WB,TT: Manifest 问题在任何新工具调用前停止；绑定失败绝不回退 branch latest
+    else 调用计划合法
+      BR-->>WB: PlannedToolCall[]（精确 tool_id/inner_tool_name/arguments）
+      loop 每个 PlannedToolCall，严格串行
+        WB->>TT: invoke(tool_id, inner_tool_name, fixed_arguments, timeout)
+        TT-->>WB: RawToolOutcome（仅业务 payload；无认证头）
+        WB->>MV: validate_response + 计算 response/receipt hash
+        MV-->>WB: 契约通过或安全错误分类；不重试、不换工具
+      end
+    end
+    WB-->>WB: 追加 ExecutionReceipt；空搜索与故障是不同状态
+  end
+  WB-->>U: envelope(next=Core step 或完成，原始业务响应仅在内存/stdout 交接)
+
+  U->>CLI: mtrp query finalize（原请求参数 + expected hash；stdin=envelope）
+  CLI->>QF: finalize(request, expected_manifest_hash, envelope)
+  QF->>MC: 重编译 expected Manifest
+  QF->>MV: 验证 envelope ID/hash、逐步骤/调用/参数/响应、缺失/重复/额外/顺序
+  MV-->>QF: 前缀完整且未被篡改；不通过则无 Vault 读取并退出 2
+  QF->>DL: begin_run 或 continue_run(execution_id + continuation_hash)
+  DL-->>QF: ExecutionRun（run_seq 仅审计，不进 Manifest/stdout）
+  QF->>NA: 校验并规范化已完成远端前缀
+  NA-->>QF: 严格 Resource/Evidence 片段或安全降级；正文不进日志
+
+  opt next_step_id 是 Core T/R barrier
+    QF->>OA: execute(core_step, Stage2ExecutionContext)
+    OA->>IO: prepare_scope(config)
+    IO-->>OA: 先完成纯词法包含/排除、G1、audit-outside-vault 校验
+    loop 仅 managed_roots 内的候选目录/文件
+      OA->>IO: lstat/scandir（不跟随链接）+ 父路径/重解析点 containment
+      IO-->>OA: 排除 symlink/junction/逃逸；排除项优先，不 open 禁区
+      OA->>IO: open_verified(candidate)
+      IO-->>OA: rb 打开、大小上限、文件身份与两次 bytes SHA256 复核
+      OA->>PA: parse(raw_bytes, relative_path)
+      PA-->>OA: frontmatter + 行内标签；排除代码块；T/R 冲突/unmanaged 标记
+    end
+    OA-->>QF: StepExecutionV2 + VaultScanSummary（无绝对路径/正文）
+    QF->>DL: 更新 continuation_hash，仅保存安全摘要
+  end
+
+  alt 下一项仍是 WorkBuddy 远端步骤
+    QF-->>CLI: ContinuationOutput(envelope)
+    CLI-->>U: output_kind=continuation；经 stdout 交回 WorkBuddy，继续外层 loop
+  else schedule 完成
+    QF->>CR: create(all resources, relations, evidence)
+    CR-->>QF: 引用完整、稳定排序、同 trace_id 的 CanonicalResultV2
+    QF->>DL: finish_run(run, response)
+    DL-->>QF: 同事务写入步骤/回执 hash/计数/状态/原因/耗时
+    QF-->>CLI: QueryResponseV2(schema_version=2)
+    CLI-->>U: OK/EMPTY/DEGRADED 均按契约退出 0；审计失败退出 1
+  end
+end
+
+Note over DL,U: 独立 QA 通过 request/route/execution/trace ID + run_seq 对照 Manifest、WorkBuddy receipt_hash、v2 OperationResult 与 Decision Log；原始响应只现场内存复核，证据文件仅存白名单摘要。

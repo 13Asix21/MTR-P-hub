@@ -1,0 +1,18 @@
+{
+  "schema_version": "1",
+  "fixture_id": "stage2-project-context",
+  "responses": {
+    "github_list_branches": [
+      {"response": {"kind": "json", "data": [{"name": "main", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "protected": false}]}, "duration_ms": 0}
+    ],
+    "github_resolve_ref": [
+      {"response": {"kind": "json", "data": {"sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "commit": {}}}, "duration_ms": 0}
+    ],
+    "github_read_repository_root": [
+      {"response": {"kind": "json", "data": [{"name": "README.md", "path": "README.md", "type": "file"}]}, "duration_ms": 0}
+    ],
+    "github_read_file": [
+      {"response": {"kind": "json", "data": {"path": "README.md", "encoding": "base64", "content_base64": "UkVBRE1FIGZpeHR1cmUK", "size": 15}}, "duration_ms": 0}
+    ]
+  }
+}

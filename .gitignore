@@ -8,10 +8,17 @@
 *.pfx
 *credentials*
 *secret*
+!tests/security/test_stage2_secret_scanning.py
 
 # Trusted local registry configuration (examples remain tracked)
 config/stores.yaml
 config/projects.yaml
+config/stage2.yaml
+
+# Stage 2 controlled handoff must never persist real raw responses
+.stage2-handoff/
+*.raw-response.json
+*.execution-envelope.json
 
 # Runtime audit data and local state
 **/.mtrp/

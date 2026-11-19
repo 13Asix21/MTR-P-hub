@@ -58,28 +58,43 @@ def test_query_url_secret_and_note_body_never_enter_output_or_database(request_f
     assert "Fixture body" not in raw_log
 
 
-def test_no_real_adapter_or_external_sdk_implementation_exists() -> None:
-    adapters = ROOT / "src" / "mtrp_hub" / "adapters"
-    for forbidden_name in ("obsidian.py", "lexiang.py", "github.py", "local_git.py"):
-        assert not (adapters / forbidden_name).exists()
-    assert not (ROOT / "src" / "mtrp_hub" / "execution").exists()
-    fake_source = (adapters / "fake.py").read_text(encoding="utf-8")
+def test_stage2_modules_have_no_native_external_sdk_implementation() -> None:
     import ast
 
-    tree = ast.parse(fake_source)
-    imported_modules = {
-        alias.name.split(".")[0]
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Import)
-        for alias in node.names
+    source_root = ROOT / "src" / "mtrp_hub"
+    adapters = source_root / "adapters"
+    for required_name in ("obsidian.py", "lexiang.py", "github.py"):
+        assert (adapters / required_name).is_file()
+    assert (source_root / "execution").is_dir()
+    assert not (adapters / "local_git.py").exists()
+
+    forbidden_imports = {
+        "requests",
+        "httpx",
+        "aiohttp",
+        "urllib",
+        "socket",
+        "subprocess",
+        "git",
+        "gitpython",
+        "pygit2",
+        "mcp",
     }
-    imported_modules.update(
-        (node.module or "").split(".")[0]
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-    )
-    for forbidden_import in ("requests", "httpx", "urllib", "socket", "subprocess", "gitpython"):
-        assert forbidden_import not in imported_modules
+    for source in source_root.rglob("*.py"):
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        imported_modules = {
+            alias.name.split(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        imported_modules.update(
+            (node.module or "").split(".")[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+        )
+        violations = forbidden_imports.intersection(imported_modules)
+        assert not violations, f"{source}: {sorted(violations)}"
 
 
 def test_fixture_with_injected_network_or_write_fields_fails_closed(request_factory, tmp_path: Path, monkeypatch) -> None:

@@ -26,6 +26,7 @@ def config_dir(tmp_path: Path) -> Path:
     shutil.copyfile(ROOT / "config" / "stores.example.yaml", target / "stores.yaml")
     shutil.copyfile(ROOT / "config" / "projects.example.yaml", target / "projects.yaml")
     shutil.copyfile(ROOT / "config" / "routing.yaml", target / "routing.yaml")
+    shutil.copyfile(ROOT / "config" / "stage2.example.yaml", target / "stage2.yaml")
     return target
 
 

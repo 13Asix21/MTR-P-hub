@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "fixture_id": "stage2-malformed",
+  "responses": {
+    "lexiang_search_text": [
+      {"response": {"kind": "json", "data": {"code": 0, "message": "success", "data": null, "request_id": "synthetic-fixture"}}, "duration_ms": 0}
+    ],
+    "github_resolve_ref": [
+      {"response": {"kind": "json", "data": {"sha": "aaaaaaa"}}, "duration_ms": 0}
+    ]
+  }
+}

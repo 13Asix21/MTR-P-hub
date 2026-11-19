@@ -13,7 +13,7 @@
 - 实测解释器：系统 PATH 默认 `python` 为 Python 3.13.14，不是本轮目标版本；`D:/DevelopSoftwares/miniconda/python.exe` 实测为 Python 3.11.11，本轮以其作为目标解释器，不要求更换系统默认 Python。
 - Project Name：`mtrp_hub`。
 - 原始需求复述：按照实施计划开始开发，本轮完成阶段 0 与阶段 1；四个人工确认门未确认前，仅建设 Router、Registry、Fake Adapters 和只读能力，不修改真实 Obsidian Vault，不调用乐享/GitHub 写工具，不自动扫描磁盘，不自动 commit/push。
-- 当前前提：仓库尚无提交，除实施计划外基本为空；`origin` 为 `git@github-mtrp:13Asix21/MTR-P-hub.git`，远端 `MTR-P-hub` 仍为空，不能作为已有可读 P 资产。
+- 当前前提：仓库尚无提交，除实施计划外基本为空；`origin` 为 `git@github.com:13Asix21/MTR-P-hub.git`，远端 `MTR-P-hub` 仍为空，不能作为已有可读 P 资产。
 
 ## 2. 产品目标
 

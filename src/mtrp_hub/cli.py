@@ -10,23 +10,34 @@ import typer
 from pydantic import ValidationError
 
 from mtrp_hub.application import RouteQueryService
+from mtrp_hub.application_stage2 import ManifestService, QueryFinalizationService
 from mtrp_hub.audit.models import DecisionEventType, DecisionPayload, DecisionRecord
 from mtrp_hub.audit.sqlite import SQLiteDecisionLog
+from mtrp_hub.audit.sqlite_stage2 import Stage2DecisionLog
 from mtrp_hub.canonical import canonical_json, sha256_json
 from mtrp_hub.config.loader import ConfigLoader
+from mtrp_hub.config.stage2 import Stage2ConfigLoader
 from mtrp_hub.domain.enums import Intent, OutputFormat, StoreKind
 from mtrp_hub.domain.requests import RouteQueryRequest, RouteQueryResponse
-from mtrp_hub.errors import MtrpError
+from mtrp_hub.domain.requests_v2 import QueryResponseV2, response_payload_v2
+from mtrp_hub.errors import MtrpError, internal_error
+from mtrp_hub.execution.models import ExecutionMode
+from mtrp_hub.execution.verifier import ManifestVerifier
+from mtrp_hub.fixtures.stage2_loader import Stage2FixtureLoader
 from mtrp_hub.security import RequestAccessGuard, rejected_write_command
 
 app = typer.Typer(
     name="mtrp",
-    help="Deterministic MTR-P read-only routing with Fake adapters only.",
+    help="Deterministic MTR-P read-only routing and controlled execution.",
     no_args_is_help=True,
     add_completion=False,
 )
 route_app = typer.Typer(help="Generate and inspect read-only route decisions.", no_args_is_help=True)
+manifest_app = typer.Typer(help="Create and verify immutable read-only execution plans.", no_args_is_help=True)
+query_app = typer.Typer(help="Finalize controlled read-only execution results.", no_args_is_help=True)
 app.add_typer(route_app, name="route")
+app.add_typer(manifest_app, name="manifest")
+app.add_typer(query_app, name="query")
 
 
 def response_payload(response: RouteQueryResponse) -> dict[str, object]:
@@ -154,6 +165,256 @@ def route_decisions(
             sys.stdout.write(
                 f"{record.event_type.value} {record.status} {record.reason_code or '-'} {record.request_hash}\n"
             )
+
+
+def _stage2_request(
+    *,
+    query: str,
+    intent: Intent,
+    project: str | None,
+    repo: str | None,
+    config_dir: str,
+    include_r: bool,
+    fixture: str | None = None,
+) -> RouteQueryRequest:
+    return RouteQueryRequest(
+        query=query,
+        intent=intent,
+        project_id=project,
+        repo_id=repo,
+        workspace_id=None,
+        config_dir=config_dir,
+        fixture=fixture,
+        include_r=include_r,
+        format=OutputFormat.JSON,
+    )
+
+
+def _read_stdin_limited(max_bytes: int) -> str:
+    """Read bounded controlled handoff bytes without creating a response file."""
+    binary = getattr(sys.stdin, "buffer", None)
+    if binary is not None:
+        raw = binary.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise MtrpError("ENVELOPE_TOO_LARGE", "Controlled stdin exceeds its size limit.", field="envelope")
+        try:
+            return raw.decode("utf-8", errors="strict")
+        except UnicodeError as exc:
+            raise MtrpError("ENVELOPE_INVALID", "Controlled stdin must be valid UTF-8.", field="envelope") from exc
+    text = sys.stdin.read(max_bytes + 1)
+    encoded = text.encode("utf-8")
+    if len(encoded) > max_bytes:
+        raise MtrpError("ENVELOPE_TOO_LARGE", "Controlled stdin exceeds its size limit.", field="envelope")
+    return text
+
+
+def _stage2_input_limit(request: RouteQueryRequest) -> int:
+    RequestAccessGuard().validate_bootstrap(request)
+    return Stage2ConfigLoader().load(request.config_dir).workbuddy_manifest.max_envelope_bytes
+
+
+def _render_v2_text(response: QueryResponseV2) -> str:
+    lines = [
+        f"模式: {response.data_mode.value}",
+        "步骤状态: " + "; ".join(
+            f"{step.step_id}={step.status.value}:{step.reason_code or 'NONE'}:{step.resource_count}"
+            for step in response.step_results
+        ),
+        f"资源/证据: {len(response.result.resources)}/{len(response.result.evidence)}",
+        f"追踪: {response.trace_id}",
+        "外部写入: disabled",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+@manifest_app.command("create")
+def manifest_create(
+    mode: ExecutionMode = typer.Option(..., "--mode", help="Explicit controlled execution mode."),
+    query: str = typer.Option(..., "--query"),
+    intent: Intent = typer.Option(..., "--intent"),
+    project: str | None = typer.Option(None, "--project"),
+    repo: str | None = typer.Option(None, "--repo"),
+    config_dir: str = typer.Option(..., "--config-dir"),
+    include_r: bool = typer.Option(False, "--include-r"),
+    output_format: OutputFormat = typer.Option(OutputFormat.JSON, "--format"),
+) -> None:
+    """Compile a Manifest without target Vault I/O or connector calls."""
+    try:
+        request = _stage2_request(query=query, intent=intent, project=project, repo=repo, config_dir=config_dir, include_r=include_r)
+        manifest = ManifestService().create(request, mode)
+    except ValidationError as exc:
+        _safe_error(_request_validation_error(exc))
+        return
+    except MtrpError as exc:
+        _safe_error(exc)
+        return
+    except Exception:
+        _safe_error(internal_error())
+        return
+    if output_format is OutputFormat.JSON:
+        sys.stdout.write(canonical_json(manifest) + "\n")
+    else:
+        sys.stdout.write(f"request_id={manifest.request_id}\nroute_id={manifest.route_id}\nexecution_id={manifest.execution_id}\nmanifest_hash={manifest.manifest_hash}\n")
+
+
+@manifest_app.command("verify")
+def manifest_verify(
+    mode: ExecutionMode = typer.Option(..., "--mode"),
+    query: str = typer.Option(..., "--query"),
+    intent: Intent = typer.Option(..., "--intent"),
+    project: str | None = typer.Option(None, "--project"),
+    repo: str | None = typer.Option(None, "--repo"),
+    config_dir: str = typer.Option(..., "--config-dir"),
+    include_r: bool = typer.Option(False, "--include-r"),
+) -> None:
+    """Recompile from the original request/config and compare every field."""
+    try:
+        request = _stage2_request(query=query, intent=intent, project=project, repo=repo, config_dir=config_dir, include_r=include_r)
+        maximum = _stage2_input_limit(request)
+        supplied = Stage2FixtureLoader().load_manifest(_read_stdin_limited(maximum))
+        ManifestService().verify(request, supplied, mode)
+    except ValidationError as exc:
+        _safe_error(_request_validation_error(exc))
+        return
+    except MtrpError as exc:
+        _safe_error(exc)
+        return
+    except Exception:
+        _safe_error(internal_error())
+        return
+    sys.stdout.write(canonical_json({"status": "VERIFIED", "request_id": supplied.request_id, "route_id": supplied.route_id, "execution_id": supplied.execution_id, "manifest_hash": supplied.manifest_hash, "external_connectivity": "not-tested"}) + "\n")
+
+
+@query_app.command("fixture")
+def query_fixture(
+    query: str = typer.Option(..., "--query"),
+    intent: Intent = typer.Option(..., "--intent"),
+    project: str | None = typer.Option(None, "--project"),
+    repo: str | None = typer.Option(None, "--repo"),
+    config_dir: str = typer.Option(..., "--config-dir"),
+    fixture: str = typer.Option(..., "--fixture"),
+    include_r: bool = typer.Option(False, "--include-r"),
+    output_format: OutputFormat = typer.Option(OutputFormat.JSON, "--format"),
+) -> None:
+    """Run the v2 state machine entirely with synthetic offline Fixtures."""
+    try:
+        request = _stage2_request(query=query, intent=intent, project=project, repo=repo, config_dir=config_dir, include_r=include_r, fixture=fixture)
+        maximum = _stage2_input_limit(request)
+        bundle = Stage2FixtureLoader().load(fixture, max_bytes=maximum)
+        response = QueryFinalizationService().run_fixture(request, bundle)
+    except ValidationError as exc:
+        _safe_error(_request_validation_error(exc))
+        return
+    except MtrpError as exc:
+        _safe_error(exc)
+        return
+    except Exception:
+        _safe_error(internal_error())
+        return
+    if output_format is OutputFormat.JSON:
+        sys.stdout.write(canonical_json(response_payload_v2(response)) + "\n")
+    else:
+        sys.stdout.write(_render_v2_text(response))
+
+
+@query_app.command("finalize")
+def query_finalize(
+    mode: ExecutionMode = typer.Option(..., "--mode"),
+    query: str = typer.Option(..., "--query"),
+    intent: Intent = typer.Option(..., "--intent"),
+    project: str | None = typer.Option(None, "--project"),
+    repo: str | None = typer.Option(None, "--repo"),
+    config_dir: str = typer.Option(..., "--config-dir"),
+    include_r: bool = typer.Option(False, "--include-r"),
+    expected_manifest_hash: str = typer.Option(..., "--expected-manifest-hash"),
+) -> None:
+    """Verify a controlled envelope, process Core barriers, and emit v2/continuation."""
+    try:
+        request = _stage2_request(query=query, intent=intent, project=project, repo=repo, config_dir=config_dir, include_r=include_r)
+        maximum = _stage2_input_limit(request)
+        envelope = Stage2FixtureLoader().load_envelope(_read_stdin_limited(maximum))
+        output = QueryFinalizationService().finalize(request, expected_manifest_hash, envelope, mode)
+    except ValidationError as exc:
+        _safe_error(_request_validation_error(exc))
+        return
+    except MtrpError as exc:
+        _safe_error(exc)
+        return
+    except Exception:
+        _safe_error(internal_error())
+        return
+    if isinstance(output, QueryResponseV2):
+        sys.stdout.write(canonical_json(response_payload_v2(output)) + "\n")
+    else:
+        sys.stdout.write(canonical_json(output) + "\n")
+
+
+@route_app.command("traces")
+def route_traces(
+    config_dir: str = typer.Option(..., "--config-dir"),
+    request_id: str | None = typer.Option(None, "--request-id"),
+    route_id: str | None = typer.Option(None, "--route-id"),
+    execution_id: str | None = typer.Option(None, "--execution-id"),
+    trace_id: str | None = typer.Option(None, "--trace-id"),
+) -> None:
+    """Read safe stage 2 runs/events by exactly one full-chain identity."""
+    try:
+        loaded = Stage2ConfigLoader().load(config_dir)
+        records = Stage2DecisionLog(loaded.audit_path, create=False).find(
+            request_id=request_id,
+            route_id=route_id,
+            execution_id=execution_id,
+            trace_id=trace_id,
+        )
+    except MtrpError as exc:
+        _safe_error(exc)
+        return
+    except Exception:
+        _safe_error(internal_error("DECISION_LOG_READ_FAILED"))
+        return
+    sys.stdout.write(canonical_json(records) + "\n")
+
+
+@manifest_app.command("diff")
+def manifest_diff(
+    left: str = typer.Option(..., "--left"),
+    right: str = typer.Option(..., "--right"),
+) -> None:
+    """Compare only synthetic Fixture Manifests; never execute their steps."""
+    try:
+        loader = Stage2FixtureLoader()
+        from mtrp_hub.execution.models import ExecutionManifest
+
+        left_manifest = loader.load_model(left, model=ExecutionManifest, field="manifest")
+        right_manifest = loader.load_model(right, model=ExecutionManifest, field="manifest")
+        if left_manifest.mode is not ExecutionMode.FIXTURE or right_manifest.mode is not ExecutionMode.FIXTURE:
+            raise MtrpError("MANIFEST_INVALID", "Manifest diff only accepts Fixture Manifests.", field="mode")
+        verifier = ManifestVerifier()
+        verifier.verify_intrinsic(left_manifest)
+        verifier.verify_intrinsic(right_manifest)
+        changes: list[dict[str, str | None]] = []
+
+        def visit(before, after, path: str, step_id: str | None = None) -> None:  # type: ignore[no-untyped-def]
+            if isinstance(before, dict) and isinstance(after, dict) and set(before) == set(after):
+                current_step = before.get("step_id", step_id) if path == "manifest.steps" or ".steps." in path else step_id
+                for key in sorted(before):
+                    visit(before[key], after[key], f"{path}.{key}", current_step if isinstance(current_step, str) else step_id)
+                return
+            if isinstance(before, list) and isinstance(after, list) and len(before) == len(after):
+                for index, (left_item, right_item) in enumerate(zip(before, after, strict=True)):
+                    visit(left_item, right_item, f"{path}.{index}", step_id)
+                return
+            if before != after:
+                changes.append({"path": path, "step_id": step_id, "before_sha256": sha256_json(before), "after_sha256": sha256_json(after)})
+
+        visit(left_manifest.model_dump(mode="json"), right_manifest.model_dump(mode="json"), "manifest")
+    except MtrpError as exc:
+        _safe_error(exc)
+        return
+    except Exception:
+        _safe_error(internal_error())
+        return
+    sys.stdout.write(canonical_json({"changes": changes, "left_manifest_hash": left_manifest.manifest_hash, "right_manifest_hash": right_manifest.manifest_hash, "executed": False}) + "\n")
 
 
 def _exit_main(error: MtrpError) -> NoReturn:

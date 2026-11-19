@@ -46,6 +46,7 @@ class SnapshotKind(StrEnum):
     GIT_COMMIT = "git_commit"
     CONTENT_SHA256 = "content_sha256"
     FIXTURE_SNAPSHOT = "fixture_snapshot"
+    ENTRY_VERSION = "entry_version"
 
 
 class ResourceType(StrEnum):

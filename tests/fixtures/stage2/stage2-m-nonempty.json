@@ -1,0 +1,13 @@
+{
+  "schema_version": "1",
+  "fixture_id": "stage2-m-nonempty",
+  "responses": {
+    "lexiang_search_text": [
+      {"response": {"kind": "json", "data": {"code": 0, "message": "success", "data": {"entries": [{"entry_id": "11111111111111111111111111111111", "title": "Synthetic text entry", "score": 0.75, "version": "7", "revision": null, "provider_content_sha256": null}]}, "request_id": "synthetic-fixture"}}, "duration_ms": 0}
+    ],
+    "lexiang_read_entries": [
+      {"response": {"kind": "json", "data": {"code": 0, "message": "success", "data": {"entry": {"entry_id": "11111111111111111111111111111111", "space_id": "00000000000000000000000000000000", "entry_type": "doc", "name": "Synthetic text entry", "version": "7", "revision": null, "provider_content_sha256": "ecf357e47a306367ba946fdc506d966c42e00a61d662f2ba72f8a6d6abff5070"}}, "request_id": "synthetic-fixture"}}, "duration_ms": 0},
+      {"response": {"kind": "json", "data": {"code": 0, "message": "success", "data": {"entry_id": "11111111111111111111111111111111", "content_format": "markdown", "content_text": "# Fixture entry\n\nControlled body.\n"}, "request_id": "synthetic-fixture"}}, "duration_ms": 0}
+    ]
+  }
+}

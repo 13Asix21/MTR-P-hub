@@ -4,7 +4,7 @@
 > 上游依据：`docs/MTR-P数据中台及中间件开发实施计划.md`、`docs/prd-stage-0-1.md`  
 > 本轮目标：Python 3.11 模块化单体、Canonical Model、Registry、版本化确定性 Read Policy、Fake Adapters、Decision Log、`mtrp route query` CLI。  
 > 固定验收解释器：`D:/DevelopSoftwares/miniconda/python.exe`（实测 Python 3.11.11）；PATH 默认 Python 3.13.14 不作为本轮验收依据，也不要求更换系统默认 Python。  
-> 实施仓事实：`origin=git@github-mtrp:13Asix21/MTR-P-hub.git`；本地尚无提交且远端 `MTR-P-hub` 为空，不能作为已有可读 P 资产。  
+> 实施仓事实：`origin=git@github.com:13Asix21/MTR-P-hub.git`；本地尚无提交且远端 `MTR-P-hub` 为空，不能作为已有可读 P 资产。
 > 明确边界：本轮只有 Fake 数据闭环；没有真实 Adapter、真实查询、生命周期、审批/执行、外部写入、FastAPI/MCP，也不自动执行任何 Git 写操作。
 
 ---

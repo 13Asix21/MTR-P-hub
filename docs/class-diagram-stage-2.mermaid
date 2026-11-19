@@ -1,0 +1,499 @@
+classDiagram
+direction LR
+
+class Stage2ConfigLoader {
+  +load(config_dir: str, mode: ExecutionMode) Stage2RuntimeConfig
+  +validate_cross_registry(loaded: LoadedConfig) void
+  +validate_audit_outside_vault(config_dir: str) void
+}
+class Stage2RuntimeConfig {
+  +obsidian: ObsidianConfig
+  +lexiang_m: LexiangConfig
+  +github_p: GitHubConfig
+  +workbuddy_manifest: WorkbuddyManifestConfig
+  +execution_config_hash() str
+}
+class ObsidianConfig {
+  +mode: str
+  +vault_id: str
+  +vault_root: str
+  +managed_roots: Tuple~ManagedRoot~
+  +excluded_roots: Tuple~RelativePath~
+  +trial_tag: str
+  +rarely_tag: str
+  +read_only: bool
+  +follow_symlinks: bool
+  +g1_confirmed: bool
+  +max_file_bytes: int
+  +max_scan_files: int
+  +max_results: int
+}
+class LexiangConfig {
+  +mode: str
+  +team_id: str
+  +space_id: str
+  +root_entry_id: str
+  +read_only: bool
+  +allow_empty: bool
+  +search_modes: Tuple~SearchMode~
+  +max_results: int
+  +vector_threshold: float
+  +max_entry_bytes: int
+  +timeout_seconds: int
+}
+class GitHubConfig {
+  +mode: str
+  +read_only: bool
+  +timeout_seconds: int
+  +max_file_bytes: int
+  +repositories: Tuple~GitHubRepositoryBinding~
+}
+class WorkbuddyManifestConfig {
+  +schema_version: str
+  +tool_profile: str
+  +max_steps: int
+  +max_entry_reads: int
+  +max_envelope_bytes: int
+  +persist_raw_responses: bool
+}
+class GitHubRepositoryBinding {
+  +project_id: str
+  +repo_id: str
+  +location_id: str
+  +owner: str
+  +repo: str
+  +read_paths: Tuple~RelativePath~
+  +adr_files: Tuple~RelativePath~
+}
+
+class ManifestService {
+  +create(request: RouteQueryRequest, mode: ExecutionMode) ExecutionManifest
+  +verify(request: RouteQueryRequest, manifest: ExecutionManifest) ManifestVerification
+  -prepare_route(request: RouteQueryRequest) Stage2RoutePlan
+}
+class ManifestCompiler {
+  +compile(request: RouteQueryRequest, route: Stage2RoutePlan, config: Stage2RuntimeConfig) ExecutionManifest
+  -expand_p(step: ReadStep) Tuple~ManifestStep~
+  -expand_m(step: ReadStep) Tuple~ManifestStep~
+  -expand_view(step: ReadStep) ManifestStep
+}
+class ManifestVerifier {
+  +verify_intrinsic(manifest: ExecutionManifest) void
+  +verify_expected(actual: ExecutionManifest, expected: ExecutionManifest) void
+  +verify_before_call(manifest: ExecutionManifest, expected_hash: str) void
+  -verify_profile_step(step: ManifestStep) void
+  -verify_bindings(steps: Tuple~ManifestStep~) void
+}
+class Stage2RoutePlan {
+  +schema_version: str
+  +intent: Intent
+  +rule_version: str
+  +policy_hash: str
+  +registry_hash: str
+  +execution_config_hash: str
+  +request_hash: str
+  +plan_hash: str
+  +mode: ExecutionMode
+  +project_coordinate: Optional~ProjectCoordinate~
+  +steps: Tuple~ReadStep~
+}
+class ExecutionManifest {
+  +schema_version: str
+  +mode: ExecutionMode
+  +read_only: bool
+  +request_id: str
+  +route_id: str
+  +execution_id: str
+  +request_hash: str
+  +plan_hash: str
+  +manifest_hash: str
+  +tool_profile: str
+  +profile_hash: str
+  +execution_config_hash: str
+  +limits: ExecutionLimits
+  +steps: Tuple~ManifestStep~
+  +hashed_payload() JsonObject
+  +trace_id() str
+}
+class ExecutionLimits {
+  +max_steps: int
+  +max_entry_reads: int
+  +max_tool_calls: int
+  +max_file_bytes: int
+  +max_entry_bytes: int
+  +max_envelope_bytes: int
+  +max_scan_files: int
+  +max_results: int
+}
+class ManifestStep {
+  +step_id: str
+  +route_step_id: str
+  +executor: ExecutorKind
+  +adapter: AdapterKind
+  +operation: str
+  +arguments: JsonObject
+  +on_empty: EmptyAction
+  +on_unavailable: EmptyAction
+  +read_only: bool
+}
+class StepBinding {
+  +from_step: str
+  +field: str
+}
+class ManifestVerification {
+  +manifest_hash: str
+  +profile_hash: str
+  +verified_step_count: int
+  +external_call_permitted: bool
+}
+
+class Stage2ReadonlyProfile {
+  +name: str
+  +profile_hash() str
+  +spec_for(step: ManifestStep) ToolSpec
+  +validate_arguments(step: ManifestStep) void
+  +validate_response(step: ManifestStep, response: RawResponse) void
+}
+class ToolSpec {
+  +operation: str
+  +transport_tool_id: str
+  +inner_tool_names: Tuple~str~
+  +fixed_argument_schema: JsonObject
+  +binding_contract: JsonObject
+  +response_contract: str
+  +real_response_verified: bool
+}
+class BindingResolver {
+  +resolve(step: ManifestStep, prior: Tuple~ExecutionReceipt~) ResolvedCalls
+  -scalar_commit(binding: StepBinding) str
+  -entry_candidates(binding: StepBinding) Tuple~EntryCandidate~
+  -reject_empty_or_prefix(value: str) void
+}
+class ResolvedCalls {
+  +step_id: str
+  +calls: Tuple~PlannedToolCall~
+  +skip_status: Optional~StepStatusV2~
+  +skip_reason: Optional~str~
+}
+class PlannedToolCall {
+  +call_id: str
+  +tool_id: str
+  +inner_tool_name: Optional~str~
+  +arguments: JsonObject
+}
+
+class WorkBuddyManifestExecutor {
+  +execute(manifest: ExecutionManifest, envelope: Optional~ExecutionEnvelope~) ExecutionEnvelope
+  -execute_remote_step(step: ManifestStep) ExecutionReceipt
+  -invoke(planned: PlannedToolCall) ToolCallReceipt
+  -stop_at_core_step(next_step_id: str) ExecutionEnvelope
+}
+class WorkBuddyToolTransport {
+  <<interface>>
+  +invoke(tool_id: str, inner_tool_name: Optional~str~, arguments: JsonObject, timeout_seconds: int) RawToolOutcome
+}
+class RawToolOutcome {
+  +response: Optional~RawResponse~
+  +error_kind: Optional~ToolErrorKind~
+  +duration_ms: int
+}
+class RawResponse {
+  +kind: str
+  +data: Optional~JsonValue~
+  +text: Optional~str~
+  +response_sha256() str
+}
+class ToolCallReceipt {
+  +call_id: str
+  +tool_id: str
+  +inner_tool_name: Optional~str~
+  +arguments: JsonObject
+  +arguments_sha256: str
+  +response: Optional~RawResponse~
+  +response_sha256: Optional~str~
+  +status: StepStatusV2
+  +reason_code: Optional~str~
+  +duration_ms: int
+}
+class ExecutionReceipt {
+  +step_id: str
+  +route_step_id: str
+  +manifest_hash: str
+  +execution_id: str
+  +status: StepStatusV2
+  +reason_code: Optional~str~
+  +calls: Tuple~ToolCallReceipt~
+  +binding_data: JsonObject
+  +receipt_hash: str
+  +calculate_hash() str
+}
+class ExecutionEnvelope {
+  +schema_version: str
+  +mode: ExecutionMode
+  +request_id: str
+  +route_id: str
+  +execution_id: str
+  +trace_id: str
+  +manifest_hash: str
+  +profile_hash: str
+  +receipts: Tuple~ExecutionReceipt~
+  +core_receipts: Tuple~CoreStepReceipt~
+  +next_step_id: Optional~str~
+  +continuation_hash: str
+  +envelope_hash() str
+}
+class CoreStepReceipt {
+  +step_id: str
+  +route_step_id: str
+  +execution: StepExecutionV2
+  +scan: Optional~VaultScanSummary~
+}
+
+class ObsidianAdapter {
+  +execute(step: ManifestStep, context: Stage2ExecutionContext) StepExecutionV2
+  +inventory(context: Stage2ExecutionContext) VaultInventory
+}
+class SafeVaultIO {
+  +prepare_scope(config: ObsidianConfig) PreparedVaultScope
+  +iter_markdown(scope: PreparedVaultScope) Iterable~VaultCandidate~
+  +open_verified(candidate: VaultCandidate) VerifiedVaultFile
+  -lexical_allow(path: PurePosixPath) bool
+  -check_no_reparse(path: Path) void
+  -check_containment(path: Path) void
+  -double_read_hash(handle: BinaryIO) VerifiedBytes
+}
+class PreparedVaultScope {
+  +vault_root: Path
+  +managed_roots: Tuple~Path~
+  +excluded_roots: Tuple~PurePosixPath~
+  +scope_sha256: str
+}
+class VerifiedVaultFile {
+  +relative_path: str
+  +managed_root_id: str
+  +raw_bytes: bytes
+  +content_sha256: str
+}
+class ObsidianMarkdownParser {
+  +parse(raw_bytes: bytes, relative_path: str) ParsedObsidianDocument
+  -frontmatter_tags(lines: Tuple~str~) Tuple~str~
+  -inline_tags_outside_code(lines: Tuple~str~) Tuple~str~
+}
+class ParsedObsidianDocument {
+  +title: str
+  +tags: Tuple~str~
+  +classification: str
+  +needs_classification: bool
+  +has_trial: bool
+  +has_rarely: bool
+}
+class VaultScanSummary {
+  +scope_sha256: str
+  +scanned_count: int
+  +matched_count: int
+  +unmanaged_count: int
+  +conflict_count: int
+  +skipped_count: int
+  +error_count: int
+  +inventory_sha256: str
+}
+
+class LexiangMAdapter {
+  +normalize(route_step: ReadStep, receipts: Tuple~ExecutionReceipt~, context: Stage2ExecutionContext) StepExecutionV2
+  -space(receipt: ExecutionReceipt) SpaceResolution
+  -search(receipt: ExecutionReceipt) SearchBatch
+  -entries(receipt: ExecutionReceipt) Tuple~KnowledgeEntryData~
+}
+class GitHubPAdapter {
+  +normalize(route_step: ReadStep, receipts: Tuple~ExecutionReceipt~, context: Stage2ExecutionContext) StepExecutionV2
+  -branches(receipt: ExecutionReceipt) BranchBatch
+  -commit(receipt: ExecutionReceipt) str
+  -file(receipt: ExecutionReceipt) GitHubFileData
+}
+class Stage2ExecutionContext {
+  +request_id: str
+  +route_id: str
+  +execution_id: str
+  +trace_id: str
+  +manifest_hash: str
+  +config: Stage2RuntimeConfig
+}
+
+class ResourceV2 {
+  +resource_id: str
+  +resource_type: ResourceType
+  +title: str
+  +content_ref: str
+  +source_ref: SourceRef
+  +snapshot_ref: Optional~SnapshotRef~
+  +project_coordinate: Optional~ProjectCoordinate~
+  +evidence_ids: Tuple~str~
+  +score: Optional~float~
+  +score_source: ScoreSource
+  +trace_id: str
+  +step_id: str
+  +operation_id: str
+  +to_legacy() Resource
+}
+class EvidenceV2 {
+  +evidence_id: str
+  +source_ref: SourceRef
+  +snapshot_ref: Optional~SnapshotRef~
+  +project_coordinate: Optional~ProjectCoordinate~
+  +path: Optional~str~
+  +entry_id: Optional~str~
+  +content_sha256: Optional~str~
+  +content_hash_scope: str
+  +request_hash: str
+  +plan_hash: str
+  +step_id: str
+  +operation_id: str
+  +request_id: str
+  +route_id: str
+  +execution_id: str
+  +trace_id: str
+  +to_legacy() Evidence
+}
+class OperationResult {
+  +step_id: str
+  +status: StepStatusV2
+  +reason_code: Optional~str~
+  +resource_count: int
+  +skipped_count: int
+  +tool_call_count: int
+  +receipt_hash: Optional~str~
+  +score_available_count: int
+}
+class StepResultV2 {
+  +step_id: str
+  +store: StoreKind
+  +status: StepStatusV2
+  +reason_code: Optional~str~
+  +coordinate: Optional~ProjectCoordinate~
+  +resource_ids: Tuple~str~
+  +evidence_ids: Tuple~str~
+  +resource_count: int
+  +evidence_count: int
+  +next_step_id: Optional~str~
+  +request_id: str
+  +route_id: str
+  +execution_id: str
+  +trace_id: str
+  +operations: Tuple~OperationResult~
+  +skipped_count: int
+}
+class StepExecutionV2 {
+  +step_result: StepResultV2
+  +resources: Tuple~ResourceV2~
+  +relations: Tuple~Relation~
+  +evidence: Tuple~EvidenceV2~
+  +validate_consistency() void
+}
+class CanonicalResultV2 {
+  +resources: Tuple~ResourceV2~
+  +relations: Tuple~Relation~
+  +evidence: Tuple~EvidenceV2~
+  +create(resources: Iterable, relations: Iterable, evidence: Iterable) CanonicalResultV2
+  +validate_references() void
+  +to_legacy() CanonicalResult
+}
+class QueryResponseV2 {
+  +schema_version: str
+  +data_mode: ExecutionMode
+  +request_id: str
+  +route_id: str
+  +execution_id: str
+  +trace_id: str
+  +manifest_hash: str
+  +status: StepStatusV2
+  +step_results: Tuple~StepResultV2~
+  +result: CanonicalResultV2
+}
+class ContinuationOutput {
+  +output_kind: str
+  +envelope: ExecutionEnvelope
+}
+
+class QueryFinalizationService {
+  +finalize(request: RouteQueryRequest, expected_manifest_hash: str, envelope: ExecutionEnvelope) FinalizationOutput
+  -verify_prefix(manifest: ExecutionManifest, envelope: ExecutionEnvelope) void
+  -execute_core_barrier(manifest: ExecutionManifest, envelope: ExecutionEnvelope) ExecutionEnvelope
+  -normalize_completed(manifest: ExecutionManifest, envelope: ExecutionEnvelope) QueryResponseV2
+  -continuation(envelope: ExecutionEnvelope) ContinuationOutput
+}
+class Stage2DecisionLog {
+  +record_plan(manifest: ExecutionManifest) void
+  +begin_run(envelope: ExecutionEnvelope) ExecutionRun
+  +continue_run(envelope: ExecutionEnvelope) ExecutionRun
+  +finish_run(run: ExecutionRun, response: QueryResponseV2) void
+  +reject_run(run: Optional~ExecutionRun~, error: MtrpError) void
+  +find(request_id: Optional~str~, route_id: Optional~str~, execution_id: Optional~str~, trace_id: Optional~str~) Tuple~DecisionQueryRecord~
+}
+class ExecutionRun {
+  +run_seq: int
+  +execution_id: str
+  +trace_id: str
+  +status: str
+  +last_continuation_hash: str
+}
+
+Stage2ConfigLoader ..> Stage2RuntimeConfig : creates
+Stage2RuntimeConfig *-- ObsidianConfig
+Stage2RuntimeConfig *-- LexiangConfig
+Stage2RuntimeConfig *-- GitHubConfig
+Stage2RuntimeConfig *-- WorkbuddyManifestConfig
+GitHubConfig *-- GitHubRepositoryBinding
+ManifestService --> ManifestCompiler
+ManifestService --> ManifestVerifier
+ManifestService --> Stage2ConfigLoader
+ManifestCompiler ..> Stage2RoutePlan : uses
+ManifestCompiler ..> ExecutionManifest : creates
+ExecutionManifest *-- ExecutionLimits
+ExecutionManifest *-- ManifestStep
+ManifestStep --> StepBinding : declarative arguments
+ManifestVerifier --> Stage2ReadonlyProfile
+Stage2ReadonlyProfile o-- ToolSpec
+WorkBuddyManifestExecutor --> ManifestVerifier : verifies before first call
+WorkBuddyManifestExecutor --> BindingResolver
+WorkBuddyManifestExecutor --> WorkBuddyToolTransport : host supplied only
+WorkBuddyManifestExecutor --> Stage2ReadonlyProfile
+BindingResolver ..> ResolvedCalls : creates
+ResolvedCalls *-- PlannedToolCall
+WorkBuddyManifestExecutor ..> ExecutionEnvelope : creates
+ExecutionEnvelope *-- ExecutionReceipt
+ExecutionEnvelope *-- CoreStepReceipt
+ExecutionReceipt *-- ToolCallReceipt
+ToolCallReceipt *-- RawResponse
+ObsidianAdapter --> SafeVaultIO
+ObsidianAdapter --> ObsidianMarkdownParser
+SafeVaultIO ..> PreparedVaultScope : creates
+SafeVaultIO ..> VerifiedVaultFile : creates
+ObsidianMarkdownParser ..> ParsedObsidianDocument : creates
+ObsidianAdapter ..> VaultScanSummary : creates
+LexiangMAdapter --> ExecutionReceipt : normalizes
+GitHubPAdapter --> ExecutionReceipt : normalizes
+QueryFinalizationService --> ManifestVerifier
+QueryFinalizationService --> ObsidianAdapter
+QueryFinalizationService --> LexiangMAdapter
+QueryFinalizationService --> GitHubPAdapter
+QueryFinalizationService --> Stage2DecisionLog
+QueryFinalizationService ..> QueryResponseV2 : creates
+QueryFinalizationService ..> ContinuationOutput : creates
+CoreStepReceipt *-- StepExecutionV2
+StepExecutionV2 *-- StepResultV2
+StepExecutionV2 *-- ResourceV2
+StepExecutionV2 *-- EvidenceV2
+StepResultV2 *-- OperationResult
+CanonicalResultV2 *-- ResourceV2
+CanonicalResultV2 *-- EvidenceV2
+QueryResponseV2 *-- StepResultV2
+QueryResponseV2 *-- CanonicalResultV2
+ContinuationOutput *-- ExecutionEnvelope
+Stage2DecisionLog ..> ExecutionRun : creates and resumes
+ResourceV2 --> SourceRef
+ResourceV2 --> SnapshotRef
+EvidenceV2 --> SourceRef
+EvidenceV2 --> SnapshotRef
+ResourceV2 ..> Resource : explicit downgrade only
+EvidenceV2 ..> Evidence : explicit downgrade only
+CanonicalResultV2 ..> CanonicalResult : explicit downgrade only

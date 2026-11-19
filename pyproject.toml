@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mtrp-hub"
-version = "0.1.0"
-description = "Deterministic read-only MTR-P routing baseline with fake adapters"
-readme = {text = "MTR-P Hub stage 0+1 safe routing baseline.", content-type = "text/plain"}
+version = "0.2.0"
+description = "Deterministic MTR-P read-only routing with constrained stage 2 execution"
+readme = {text = "MTR-P Hub deterministic read-only routing and stage 2 controlled execution.", content-type = "text/plain"}
 requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.10,<3",
