@@ -1,0 +1,3 @@
+# 仅供 apps/connect-panel 独立面板使用；请勿并入主仓 pyproject.toml。
+fastapi>=0.110,<1
+uvicorn>=0.29,<1

@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MTR-P 四库连接面板</title>
+  <style>
+    :root {
+      --page: #f5f7fb;
+      --surface: #ffffff;
+      --surface-soft: #f9fafb;
+      --text: #202735;
+      --muted: #667085;
+      --line: #e4e9f0;
+      --green: #237a4b;
+      --green-soft: #edf8f1;
+      --purple: #7350a6;
+      --purple-soft: #f5f0fb;
+      --amber: #95620a;
+      --amber-soft: #fff8e8;
+      --blue: #3268a8;
+      --blue-soft: #eef5fc;
+      --red: #b42318;
+      --red-soft: #fff1f0;
+      --gray-soft: #f1f3f6;
+      --shadow: 0 8px 28px rgba(33, 43, 61, 0.06);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+      color: var(--text);
+      background: var(--page);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; background: var(--page); color: var(--text); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: wait; opacity: 0.62; }
+    .page-shell { width: min(1480px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 36px; }
+    .hero {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 26px 28px 22px;
+      box-shadow: var(--shadow);
+    }
+    .hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+    .eyebrow { margin: 0 0 8px; color: var(--blue); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; }
+    h1 { margin: 0; font-size: clamp(25px, 3vw, 36px); line-height: 1.25; letter-spacing: -0.02em; }
+    .subtitle { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+    .honesty {
+      margin: 20px 0 0;
+      padding: 12px 14px;
+      border-left: 3px solid #8aa9ca;
+      border-radius: 0 8px 8px 0;
+      background: #f5f8fc;
+      color: #526175;
+      font-size: 12px;
+      line-height: 1.75;
+    }
+    .hero-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex-shrink: 0; }
+    .button {
+      border: 1px solid #cfd8e5;
+      border-radius: 9px;
+      background: #ffffff;
+      color: #344054;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 650;
+      transition: background 120ms ease, border-color 120ms ease;
+    }
+    .button:hover:not(:disabled) { background: #f4f7fb; border-color: #aebdd0; }
+    .button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgba(50, 104, 168, 0.2); outline-offset: 2px; }
+    .button-primary { background: #e9f1fb; border-color: #b8cee8; color: #285c96; }
+    .button-primary:hover:not(:disabled) { background: #dceafb; border-color: #8fb1d7; }
+    .button-small { padding: 7px 11px; font-size: 12px; }
+    .local-badge { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .profile-panel {
+      display: grid;
+      grid-template-columns: minmax(240px, 0.8fr) minmax(420px, 1.4fr);
+      gap: 16px;
+      align-items: end;
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      background: #fbfcfe;
+    }
+    .profile-panel label { display: block; margin-bottom: 5px; color: #526175; font-size: 11px; font-weight: 650; }
+    .current-user-row { display: flex; align-items: center; gap: 9px; }
+    .select-input { min-width: 0; border: 1px solid #d5dce6; border-radius: 8px; background: #ffffff; color: #344054; padding: 8px 10px; font-size: 12px; }
+    #user-select { width: 100%; }
+    .role-badge { flex-shrink: 0; border-radius: 999px; padding: 4px 9px; background: var(--gray-soft); color: #667085; font-size: 10px; font-weight: 700; }
+    .role-badge.owner { background: var(--green-soft); color: var(--green); }
+    .role-badge.editor { background: var(--blue-soft); color: var(--blue); }
+    .role-badge.viewer { background: var(--gray-soft); color: #667085; }
+    .new-user-form { display: grid; grid-template-columns: minmax(140px, 1fr) 130px auto; gap: 8px; align-items: end; }
+    .profile-note { grid-column: 1 / -1; margin: -3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .global-message { min-height: 20px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+    .global-message.error { color: var(--red); }
+    .config-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 18px;
+      margin: 18px 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .config-strip strong { color: #475467; font-weight: 650; }
+    .legend { display: inline-flex; flex-wrap: wrap; gap: 10px; margin-left: auto; }
+    .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .legend-dot { width: 7px; height: 7px; border-radius: 50%; background: #98a2b3; }
+    .legend-dot.ok { background: #46a374; }
+    .legend-dot.limited { background: #98a2b3; }
+    .legend-dot.error { background: #d92d20; }
+    .store-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+    .card {
+      position: relative;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+    .card::before { content: ""; display: block; height: 4px; background: #d9e2ec; }
+    .card.m::before { background: #a9d9bc; }
+    .card.t::before { background: #ceb9e7; }
+    .card.r::before { background: #ebcd8f; }
+    .card.p::before { background: #a9c7e8; }
+    .card-body { padding: 21px 22px 22px; }
+    .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+    .store-heading { display: flex; gap: 12px; align-items: center; }
+    .store-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; font-size: 19px; font-weight: 800; }
+    .m .store-mark { background: var(--green-soft); color: var(--green); }
+    .t .store-mark { background: var(--purple-soft); color: var(--purple); }
+    .r .store-mark { background: var(--amber-soft); color: var(--amber); }
+    .p .store-mark { background: var(--blue-soft); color: var(--blue); }
+    h2 { margin: 0 0 5px; font-size: 18px; line-height: 1.3; }
+    h3 { margin: 0; font-size: 14px; }
+    .mode-line { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mode-badge, .reserved-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 5px;
+      padding: 3px 7px;
+      background: var(--gray-soft);
+      color: #596579;
+      font-size: 10px;
+      font-weight: 650;
+    }
+    .reserved-badge { background: var(--amber-soft); color: var(--amber); }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: var(--gray-soft);
+      color: #667085;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .status-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .status-pill.ok { background: var(--green-soft); color: var(--green); }
+    .status-pill.limited { background: var(--gray-soft); color: #667085; }
+    .status-pill.error { background: var(--red-soft); color: var(--red); }
+    .status-pill.unconfigured, .status-pill.pending { background: #f4f5f7; color: #7b8494; }
+    .notice {
+      margin: 0 0 15px;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+    .m .notice { background: var(--green-soft); }
+    .t .notice { background: var(--purple-soft); }
+    .r .notice { background: var(--amber-soft); }
+    .p .notice { background: var(--blue-soft); }
+    .facts { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+    .facts th, .facts td { padding: 9px 0; border-bottom: 1px solid #edf0f4; vertical-align: top; line-height: 1.55; overflow-wrap: anywhere; }
+    .facts tr:last-child th, .facts tr:last-child td { border-bottom: 0; }
+    .facts th { width: 34%; padding-right: 14px; color: var(--muted); text-align: left; font-weight: 500; }
+    .facts td { color: #344054; text-align: right; font-variant-numeric: tabular-nums; }
+    .path-value, .mono { font-family: Consolas, "Cascadia Mono", monospace; font-size: 11px; }
+    .path-control { margin-top: 17px; padding-top: 16px; border-top: 1px solid var(--line); }
+    .path-control label, .field label { display: block; margin-bottom: 6px; color: #475467; font-size: 11px; font-weight: 650; }
+    .input-row { display: flex; gap: 8px; }
+    .text-input {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #d5dce6;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #344054;
+      padding: 8px 10px;
+      font-family: Consolas, "Cascadia Mono", "Microsoft YaHei", monospace;
+      font-size: 11px;
+    }
+    .text-input::placeholder { color: #98a2b3; }
+    .input-row .text-input { flex: 1; }
+    .input-row .button { flex-shrink: 0; }
+    .card-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; }
+    .action-note { color: var(--muted); font-size: 10px; line-height: 1.5; }
+    .p-section { padding: 15px; border: 1px solid #e1eaf4; border-radius: 11px; background: #fbfdff; }
+    .p-section + .p-section { margin-top: 14px; }
+    .p-section-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .coordinates { display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; margin-top: 13px; }
+    .auto-row { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    .auto-row input { accent-color: var(--blue); }
+    .audit-panel { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+    .audit-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+    .audit-header p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+    .table-scroll { overflow-x: auto; }
+    .audit-table { width: 100%; border-collapse: collapse; min-width: 900px; font-size: 11px; }
+    .audit-table th, .audit-table td { padding: 10px 13px; border-bottom: 1px solid #edf0f4; text-align: left; white-space: nowrap; }
+    .audit-table th { background: #fafbfc; color: var(--muted); font-weight: 650; }
+    .audit-table td { color: #475467; }
+    .audit-empty { padding: 24px; color: var(--muted); text-align: center; font-size: 12px; }
+    .footer { display: flex; justify-content: space-between; gap: 16px; margin: 20px 3px 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    @media (max-width: 980px) {
+      .store-grid { grid-template-columns: 1fr; }
+      .legend { margin-left: 0; width: 100%; }
+      .profile-panel { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .page-shell { width: min(100% - 22px, 1480px); padding-top: 12px; }
+      .hero { padding: 20px 18px; }
+      .hero-top { flex-direction: column; }
+      .hero-actions { width: 100%; align-items: stretch; }
+      .card-body { padding: 18px 16px; }
+      .card-header { flex-direction: column; }
+      .input-row { flex-direction: column; }
+      .coordinates { grid-template-columns: 1fr; }
+      .new-user-form { grid-template-columns: 1fr; }
+      .current-user-row { align-items: stretch; flex-direction: column; }
+      .footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-top">
+        <div>
+          <p class="eyebrow">本机只读 · 四库状态</p>
+          <h1>MTR-P 四库连接面板</h1>
+          <p class="subtitle">加载配置、核验载体，并把实时能力与会话证据明确区分。</p>
+        </div>
+        <div class="hero-actions">
+          <button type="button" class="button button-primary" id="check-all">全部重新检测</button>
+          <span class="local-badge">仅监听 127.0.0.1 · 默认无自动轮询</span>
+        </div>
+      </div>
+      <p class="honesty">M/在线为 WorkBuddy 会话级连接器证据；T/R/本地为实文件只读校验；P在线为本机直连 GitHub API 实测。面板不调用 MCP、不使用凭据、不写入 Vault、审计库、Git 工作区或主仓配置；仅用户偏好写入面板自管 data/users.json。</p>
+      <section class="profile-panel" aria-label="本地用户档案">
+        <div>
+          <label for="user-select">当前用户</label>
+          <div class="current-user-row">
+            <select class="select-input" id="user-select" aria-label="切换当前用户"></select>
+            <span class="role-badge viewer" id="current-role">观察者</span>
+          </div>
+        </div>
+        <form class="new-user-form" id="new-user-form">
+          <div><label for="new-user-name">新用户显示名称</label><input class="text-input" id="new-user-name" type="text" maxlength="64" required placeholder="例如：本机观察者"></div>
+          <div><label for="new-user-role">预留角色</label><select class="select-input" id="new-user-role"><option value="viewer">观察者</option><option value="editor">编辑者</option><option value="owner">所有者</option></select></div>
+          <button type="submit" class="button button-small" id="create-user">新建用户</button>
+        </form>
+        <p class="profile-note">多用户为档案层预留：本地单机无登录认证，接入 WorkBuddy 云服务用户体系后启用角色权限。路径、关注仓库和刷新开关按档案隔离；config 与 Decision Log 始终是机器级共享事实。</p>
+      </section>
+      <div class="global-message" id="global-message" role="status" aria-live="polite">正在读取默认配置……</div>
+    </header>
+
+    <div class="config-strip">
+      <span><strong>配置：</strong><span id="config-summary">待加载</span></span>
+      <span><strong>最近更新：</strong><span id="last-updated">尚未检测</span></span>
+      <div class="legend" aria-label="状态语义">
+        <span class="legend-item"><i class="legend-dot ok"></i>正常</span>
+        <span class="legend-item"><i class="legend-dot limited"></i>受限/如实降级</span>
+        <span class="legend-item"><i class="legend-dot error"></i>异常</span>
+        <span class="legend-item"><i class="legend-dot"></i>待检测/未配置</span>
+      </div>
+    </div>
+
+    <main class="store-grid">
+      <article class="card m" id="card-M">
+        <div class="card-body">
+          <div class="card-header">
+            <div class="store-heading">
+              <div class="store-mark">M</div>
+              <div>
+                <h2>M 库 · 乐享知识库</h2>
+                <div class="mode-line"><span class="mode-badge">在线 MCP</span><span class="mode-badge">会话证据</span></div>
+              </div>
+            </div>
+            <span class="status-pill pending" id="status-M">待检测</span>
+          </div>
+          <p class="notice">独立后端无法调用 WorkBuddy 会话级 MCP。本卡片只校验 32 位 ID、模式和只读标志，并从 Decision Log 读取最近执行证据；不声称实时在线。</p>
+          <table class="facts"><tbody id="fields-M"><tr><td class="audit-empty">尚未检测</td></tr></tbody></table>
+          <div class="card-actions">
+            <span class="action-note">证据来自 SQLite mode=ro + immutable</span>
+            <button type="button" class="button button-small" id="check-M">重新检测</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="card t" id="card-T">
+        <div class="card-body">
+          <div class="card-header">
+            <div class="store-heading">
+              <div class="store-mark">T</div>
+              <div>
+                <h2>T 库 · Obsidian 临时视图</h2>
+                <div class="mode-line"><span class="mode-badge">本地文件夹</span><span class="mode-badge">mtr/trial</span></div>
+              </div>
+            </div>
+            <span class="status-pill pending" id="status-T">待检测</span>
+          </div>
+          <p class="notice">只扫描 managed roots 内的 .md 文件，复用主仓 Markdown 解析语义。双标签冲突单独计数，不并入 T 或 R；链接和 junction 不跟随。</p>
+          <table class="facts"><tbody id="fields-T"><tr><td class="audit-empty">尚未检测</td></tr></tbody></table>
+          <div class="path-control">
+            <label for="vault-path">Vault 绝对路径（支持 C:\... 或 C:/...）</label>
+            <div class="input-row">
+              <input class="text-input vault-path-input" id="vault-path" type="text" spellcheck="false" placeholder="输入本地 Vault 路径">
+              <button type="button" class="button button-small" id="validate-T">校验此路径</button>
+              <button type="button" class="button button-small" id="save-T-pref">保存为该用户偏好</button>
+            </div>
+          </div>
+          <div class="card-actions">
+            <span class="action-note">默认上限 5000 个 Markdown 文件</span>
+            <button type="button" class="button button-small" id="check-T">重新检测</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="card r" id="card-R">
+        <div class="card-body">
+          <div class="card-header">
+            <div class="store-heading">
+              <div class="store-mark">R</div>
+              <div>
+                <h2>R 库 · 低频沉淀视图</h2>
+                <div class="mode-line"><span class="mode-badge">同一 Vault 逻辑视图</span><span class="reserved-badge">预留</span></div>
+              </div>
+            </div>
+            <span class="status-pill pending" id="status-R">待检测</span>
+          </div>
+          <p class="notice">与 T 共用同一次扫描结果，仅展示 mtr/rarely 统计。T↔R 下沉/复活提案和生命周期管理属于阶段 3，本面板不执行任何状态变更。</p>
+          <table class="facts"><tbody id="fields-R"><tr><td class="audit-empty">尚未检测</td></tr></tbody></table>
+          <div class="path-control">
+            <label for="vault-path-r">共享 Vault 路径（与 T 同步）</label>
+            <div class="input-row">
+              <input class="text-input vault-path-input" id="vault-path-r" type="text" spellcheck="false" placeholder="输入同一 Vault 路径">
+              <button type="button" class="button button-small" id="validate-R">校验此路径</button>
+              <button type="button" class="button button-small" id="save-R-pref">保存为该用户偏好</button>
+            </div>
+          </div>
+          <div class="card-actions">
+            <span class="action-note">预留视图 · 只读统计</span>
+            <button type="button" class="button button-small" id="check-R">重新检测</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="card p" id="card-P">
+        <div class="card-body">
+          <div class="card-header">
+            <div class="store-heading">
+              <div class="store-mark">P</div>
+              <div>
+                <h2>P 库 · 原则与决策仓库</h2>
+                <div class="mode-line"><span class="mode-badge">GitHub 在线 + 本地</span><span class="mode-badge">双模式</span></div>
+              </div>
+            </div>
+          </div>
+          <section class="p-section">
+            <div class="p-section-header">
+              <h3>GitHub 在线</h3>
+              <span class="status-pill pending" id="status-P-online">待检测</span>
+            </div>
+            <p class="notice">两次无凭据 GET 实测仓库元数据与默认分支最新 commit；失败、限流和超时均如实显示，不伪造在线状态。</p>
+            <table class="facts"><tbody id="fields-P-online"><tr><td class="audit-empty">尚未检测</td></tr></tbody></table>
+            <div class="coordinates">
+              <div class="field"><label for="github-owner">owner</label><input class="text-input" id="github-owner" type="text" spellcheck="false"></div>
+              <div class="field"><label for="github-repo">repo</label><input class="text-input" id="github-repo" type="text" spellcheck="false"></div>
+            </div>
+            <div class="card-actions">
+              <label class="auto-row"><input id="github-auto" type="checkbox"><span id="github-auto-label">自动刷新（默认关）</span></label>
+              <button type="button" class="button button-small" id="save-P-online-pref">保存为该用户偏好</button>
+              <button type="button" class="button button-small" id="check-P-online">重新检测</button>
+            </div>
+          </section>
+          <section class="p-section">
+            <div class="p-section-header">
+              <h3>本地 Git 工作区</h3>
+              <span class="status-pill pending" id="status-P-local">待检测</span>
+            </div>
+            <table class="facts"><tbody id="fields-P-local"><tr><td class="audit-empty">尚未检测</td></tr></tbody></table>
+            <div class="path-control">
+              <label for="git-path">本地工作区绝对路径</label>
+              <div class="input-row">
+                <input class="text-input" id="git-path" type="text" spellcheck="false" placeholder="输入包含 .git 的目录">
+                <button type="button" class="button button-small" id="validate-P-local">校验此路径</button>
+                <button type="button" class="button button-small" id="save-P-local-pref">保存为该用户偏好</button>
+              </div>
+            </div>
+            <div class="card-actions">
+              <span class="action-note">禁用可选锁；绝不 pull / push / checkout</span>
+              <button type="button" class="button button-small" id="check-P-local">重新检测</button>
+            </div>
+          </section>
+        </div>
+      </article>
+    </main>
+
+    <section class="audit-panel">
+      <div class="audit-header">
+        <div>
+          <h3>最近审计事件</h3>
+          <p>白名单字段，最多读取 10 条；不包含原始请求、响应载荷或凭据。</p>
+        </div>
+        <button type="button" class="button button-small" id="load-audit">读取最近 10 条</button>
+      </div>
+      <div id="audit-content"><div class="audit-empty">尚未读取；点击右上角按钮执行只读查询。</div></div>
+    </section>
+
+    <footer class="footer">
+      <span>只读承诺：不写配置文件、不修改 Vault、不写 Decision Log、不改变 Git 工作区。</span>
+      <span>状态语义：ok / limited / error / unconfigured / pending</span>
+    </footer>
+  </div>
+
+  <script>
+    "use strict";
+
+    const STATUS_LABELS = {
+      ok: "正常",
+      limited: "受限",
+      error: "异常",
+      unconfigured: "未配置",
+      pending: "待检测"
+    };
+    const ROLE_LABELS = { owner: "所有者", editor: "编辑者", viewer: "观察者" };
+    const numberFormatter = new Intl.NumberFormat("zh-CN");
+    let githubTimer = null;
+    let githubInFlight = false;
+    let allChecksInFlight = false;
+    let currentUserId = "default";
+    let currentAutoRefreshMinutes = 0;
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    function safeStatus(status) {
+      return Object.prototype.hasOwnProperty.call(STATUS_LABELS, status) ? status : "error";
+    }
+
+    function setStatus(id, status, overrideLabel) {
+      const normalized = safeStatus(status);
+      const element = byId(id);
+      element.className = "status-pill " + normalized;
+      element.textContent = overrideLabel || STATUS_LABELS[normalized];
+    }
+
+    function setBusy(id, busy, busyLabel) {
+      const button = byId(id);
+      if (!button.dataset.defaultLabel) button.dataset.defaultLabel = button.textContent;
+      button.disabled = busy;
+      button.textContent = busy ? (busyLabel || "检测中……") : button.dataset.defaultLabel;
+    }
+
+    function setGlobalMessage(message, isError = false) {
+      const element = byId("global-message");
+      element.textContent = message;
+      element.className = isError ? "global-message error" : "global-message";
+    }
+
+    function touchUpdated() {
+      byId("last-updated").textContent = new Date().toLocaleString("zh-CN", { hour12: false });
+    }
+
+    function displayValue(value) {
+      if (value === null || value === undefined || value === "") return "无";
+      if (typeof value === "boolean") return value ? "是" : "否";
+      if (typeof value === "number") return numberFormatter.format(value);
+      return String(value);
+    }
+
+    function shortHash(value, length = 12) {
+      if (!value) return "无";
+      const text = String(value);
+      return text.length > length ? text.slice(0, length) + "…" : text;
+    }
+
+    function formatDate(value) {
+      if (!value) return "无";
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("zh-CN", { hour12: false });
+    }
+
+    function renderRows(id, rows) {
+      const body = byId(id);
+      body.replaceChildren();
+      rows.forEach(([label, value, className]) => {
+        const row = document.createElement("tr");
+        const heading = document.createElement("th");
+        const cell = document.createElement("td");
+        heading.scope = "row";
+        heading.textContent = label;
+        cell.textContent = displayValue(value);
+        if (className) cell.className = className;
+        row.append(heading, cell);
+        body.appendChild(row);
+      });
+    }
+
+    function renderApiError(fieldsId, statusId, error) {
+      setStatus(statusId, "error");
+      renderRows(fieldsId, [
+        ["错误代码", error.code || "REQUEST_FAILED", "mono"],
+        ["安全说明", error.message || "请求失败，请稍后重试。"]
+      ]);
+    }
+
+    async function callApi(path, method = "GET", body) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 90000);
+      const options = { method, headers: { "Accept": "application/json" }, signal: controller.signal };
+      if (body !== undefined) {
+        options.headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(body);
+      }
+      try {
+        const response = await fetch(path, options);
+        let envelope;
+        try {
+          envelope = await response.json();
+        } catch (_error) {
+          throw { code: "RESPONSE_INVALID", message: "服务返回了非 JSON 响应。" };
+        }
+        if (!envelope || envelope.status === "error") {
+          throw (envelope && envelope.error) || { code: "HTTP_" + response.status, message: "请求失败。" };
+        }
+        if (envelope.status !== "ok" || envelope.data === undefined) {
+          throw { code: "ENVELOPE_INVALID", message: "服务响应包裹格式无效。" };
+        }
+        return envelope.data;
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          throw { code: "REQUEST_TIMEOUT", message: "请求超过 90 秒，已取消。" };
+        }
+        if (error && error.code) throw error;
+        throw { code: "PANEL_UNREACHABLE", message: "无法连接本地面板服务，请确认服务仍在运行。" };
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    function renderRole(role) {
+      const badge = byId("current-role");
+      badge.textContent = ROLE_LABELS[role] || "未配置";
+      badge.className = "role-badge " + (ROLE_LABELS[role] ? role : "viewer");
+    }
+
+    function configureGithubAuto(minutes, immediate = false) {
+      if (githubTimer !== null) {
+        window.clearInterval(githubTimer);
+        githubTimer = null;
+      }
+      currentAutoRefreshMinutes = Number.isInteger(minutes) ? minutes : 0;
+      byId("github-auto").checked = currentAutoRefreshMinutes > 0;
+      byId("github-auto-label").textContent = currentAutoRefreshMinutes > 0 ? "自动刷新（" + currentAutoRefreshMinutes + " 分钟）" : "自动刷新（默认关）";
+      if (currentAutoRefreshMinutes > 0) {
+        githubTimer = window.setInterval(() => {
+          if (!document.hidden) checkGithub(true);
+        }, currentAutoRefreshMinutes * 60000);
+        if (immediate) checkGithub(true);
+      }
+    }
+
+    async function loadUsers(selectedId = "default") {
+      const users = await callApi("/api/users");
+      const select = byId("user-select");
+      select.replaceChildren();
+      users.forEach(user => {
+        const option = document.createElement("option");
+        option.value = user.user_id;
+        option.textContent = user.display_name + "（" + (ROLE_LABELS[user.role] || user.role) + "）";
+        select.appendChild(option);
+      });
+      const selected = users.some(user => user.user_id === selectedId) ? selectedId : "default";
+      select.value = selected;
+      currentUserId = selected;
+      const current = users.find(user => user.user_id === selected);
+      if (current) renderRole(current.role);
+    }
+
+    async function patchPreferences(patch) {
+      return callApi("/api/users/" + encodeURIComponent(currentUserId) + "/preferences", "PATCH", patch);
+    }
+
+    async function saveVaultPreference(source) {
+      const buttonId = source === "R" ? "save-R-pref" : "save-T-pref";
+      const path = source === "R" ? byId("vault-path-r").value : byId("vault-path").value;
+      byId("vault-path").value = path;
+      byId("vault-path-r").value = path;
+      setBusy(buttonId, true, "保存中……");
+      try {
+        await patchPreferences({ vault_root: path });
+        setGlobalMessage("Vault 路径已保存为用户 " + currentUserId + " 的偏好；其他用户档案不受影响。");
+      } catch (error) {
+        setGlobalMessage((error.code || "PREFERENCE_SAVE_FAILED") + "：" + (error.message || "偏好保存失败。"), true);
+      } finally {
+        setBusy(buttonId, false);
+      }
+    }
+
+    async function saveGitLocalPreference() {
+      setBusy("save-P-local-pref", true, "保存中……");
+      try {
+        await patchPreferences({ git_local_path: byId("git-path").value });
+        setGlobalMessage("本地 Git 路径已保存为用户 " + currentUserId + " 的偏好。");
+      } catch (error) {
+        setGlobalMessage((error.code || "PREFERENCE_SAVE_FAILED") + "：" + (error.message || "偏好保存失败。"), true);
+      } finally {
+        setBusy("save-P-local-pref", false);
+      }
+    }
+
+    async function saveGithubPreference() {
+      setBusy("save-P-online-pref", true, "保存中……");
+      try {
+        await patchPreferences({
+          github_repos: [{ owner: byId("github-owner").value, repo: byId("github-repo").value }],
+          auto_refresh_minutes: byId("github-auto").checked ? (currentAutoRefreshMinutes || 5) : 0
+        });
+        setGlobalMessage("GitHub 仓库和刷新开关已保存为用户 " + currentUserId + " 的偏好。");
+      } catch (error) {
+        setGlobalMessage((error.code || "PREFERENCE_SAVE_FAILED") + "：" + (error.message || "偏好保存失败。"), true);
+      } finally {
+        setBusy("save-P-online-pref", false);
+      }
+    }
+
+    async function loadOverview() {
+      try {
+        const data = await callApi("/api/overview?user_id=" + encodeURIComponent(currentUserId));
+        const stores = data.stores;
+        currentUserId = data.current_user.user_id;
+        byId("user-select").value = currentUserId;
+        renderRole(data.current_user.role);
+        ["status-M", "status-T", "status-R", "status-P-online", "status-P-local"].forEach(id => setStatus(id, "pending"));
+        byId("vault-path").value = stores.T.vault_path || "";
+        byId("vault-path-r").value = stores.T.vault_path || "";
+        byId("git-path").value = stores.P.local.path || "";
+        byId("github-owner").value = stores.P.online.owner || "";
+        byId("github-repo").value = stores.P.online.repo || "";
+        const config = data.configuration;
+        byId("config-summary").textContent = config.store_count + " 库登记 · 路由 " + (config.routing_rule_version || "未知") + " · 只读配置 " + (config.all_stores_read_only ? "已确认" : "需复核") + " · 审计库 " + (config.audit_database_present ? "已发现" : "未发现");
+        renderRows("fields-M", [["连接模式", stores.M.mode], ["实时 MCP", "需 WorkBuddy 会话"], ["当前证据", stores.M.summary]]);
+        renderRows("fields-T", [["默认 Vault", stores.T.vault_path, "path-value"], ["managed roots", (stores.T.managed_roots || []).join("；")], ["trial 标签", stores.T.trial_tag, "mono"], ["扫描上限", stores.T.scan_limit]]);
+        renderRows("fields-R", [["默认 Vault", stores.R.vault_path, "path-value"], ["rarely 标签", stores.R.rarely_tag, "mono"], ["视图状态", "预留，只读统计"]]);
+        renderRows("fields-P-online", [["登记仓库", stores.P.online.owner + "/" + stores.P.online.repo, "mono"], ["连接模式", stores.P.online.mode], ["当前状态", "等待手动实测"]]);
+        renderRows("fields-P-local", [["默认工作区", stores.P.local.path, "path-value"], ["当前状态", "等待手动只读校验"]]);
+        configureGithubAuto(data.current_user.preferences.auto_refresh_minutes, false);
+        setGlobalMessage("已加载 " + data.current_user.display_name + " 的档案默认值；检测由手动触发，临时输入不会自动保存。");
+      } catch (error) {
+        setGlobalMessage((error.code || "OVERVIEW_FAILED") + "：" + (error.message || "默认配置加载失败。"), true);
+      }
+    }
+
+    async function checkLexiang() {
+      setBusy("check-M", true);
+      setStatus("status-M", "pending", "检测中");
+      try {
+        const data = await callApi("/api/check/lexiang", "POST", { user_id: currentUserId });
+        setStatus("status-M", data.status);
+        const ids = data.identifiers || {};
+        const evidence = data.latest_m_evidence;
+        const audit = data.audit || {};
+        const run = audit.latest_run;
+        const issueText = (data.issues || []).map(item => item.message).join("；") || "无";
+        renderRows("fields-M", [
+          ["配置校验", data.config_valid ? "有效" : "存在问题"],
+          ["模式 / 只读", (data.mode || "无") + " / " + displayValue(data.read_only)],
+          ["team_id", (ids.team_id || {}).display, "mono"],
+          ["space_id", (ids.space_id || {}).display, "mono"],
+          ["root_entry_id", (ids.root_entry_id || {}).display, "mono"],
+          ["配置问题", issueText],
+          ["实时在线能力", "不可由独立后端验证"],
+          ["M 最近执行证据", evidence ? (evidence.status + " · " + formatDate(evidence.recorded_at)) : "暂无 M 事件"],
+          ["M 操作 / 原因", evidence ? ((evidence.operation || evidence.event_type || "无") + " / " + (evidence.reason_code || "无")) : "无"],
+          ["M 回执哈希", evidence ? shortHash(evidence.receipt_hash) : "无", "mono"],
+          ["审计库", audit.available ? "只读读取成功" : ((audit.error || {}).message || "不可用")],
+          ["最近一次 run", run ? (run.status + " · " + formatDate(run.started_at)) : "无"]
+        ]);
+      } catch (error) {
+        renderApiError("fields-M", "status-M", error);
+      } finally {
+        setBusy("check-M", false);
+        touchUpdated();
+      }
+    }
+
+    function issueSummary(data) {
+      const issues = data.issues || [];
+      if (!issues.length) return "无";
+      const sample = issues.slice(0, 3).map(item => item.path + "：" + item.message).join("；");
+      return sample + (issues.length > 3 || data.issues_truncated ? "（仅显示部分）" : "");
+    }
+
+    async function checkVault(source = "T") {
+      const path = source === "R" ? byId("vault-path-r").value : byId("vault-path").value;
+      byId("vault-path").value = path;
+      byId("vault-path-r").value = path;
+      ["check-T", "validate-T", "check-R", "validate-R"].forEach(id => setBusy(id, true));
+      setStatus("status-T", "pending", "扫描中");
+      setStatus("status-R", "pending", "扫描中");
+      try {
+        const data = await callApi("/api/check/vault", "POST", { user_id: currentUserId, path });
+        const stats = data.statistics;
+        if (!stats) {
+          const error = data.error || { code: "VAULT_CHECK_FAILED", message: "Vault 校验失败。" };
+          renderApiError("fields-T", "status-T", error);
+          renderApiError("fields-R", "status-R", error);
+          return;
+        }
+        setStatus("status-T", data.views.T.status);
+        setStatus("status-R", data.views.R.status);
+        const shared = [
+          ["Obsidian 判定", data.obsidian.label],
+          ["扫描 / 成功解析", stats.scanned_files + " / " + stats.parsed_files],
+          ["无 MTR 标签", stats.unmanaged_notes],
+          ["双标签冲突", stats.conflict_notes],
+          ["跳过文件 / 目录", stats.skipped_files + " / " + stats.skipped_directories],
+          ["错误数", stats.error_count],
+          ["扫描上限", stats.limit_reached ? "已达上限，结果不完整（limited）" : "未达上限（" + data.scan_limit + "）"],
+          ["问题样例", issueSummary(data)]
+        ];
+        renderRows("fields-T", [
+          ["Vault 路径", data.path, "path-value"],
+          ["T 视图标签", data.trial_tag, "mono"],
+          ["T 笔记数", stats.trial_notes],
+          ...shared
+        ]);
+        renderRows("fields-R", [
+          ["Vault 路径", data.path, "path-value"],
+          ["R 视图标签", data.rarely_tag, "mono"],
+          ["R 笔记数", stats.rarely_notes],
+          ["生命周期", "预留；阶段 3 管理"],
+          ...shared
+        ]);
+      } catch (error) {
+        renderApiError("fields-T", "status-T", error);
+        renderApiError("fields-R", "status-R", error);
+      } finally {
+        ["check-T", "validate-T", "check-R", "validate-R"].forEach(id => setBusy(id, false));
+        touchUpdated();
+      }
+    }
+
+    function renderGithub(data) {
+      setStatus("status-P-online", data.status);
+      const common = [
+        ["仓库", data.owner + "/" + data.repo, "mono"],
+        ["连接结果", data.connectivity || "未知"],
+        ["凭据", "未使用"],
+        ["总实测延迟", data.total_latency_ms === undefined ? "无" : data.total_latency_ms + " ms"]
+      ];
+      if (data.status === "error") {
+        renderRows("fields-P-online", [
+          ...common,
+          ["失败阶段", data.phase === "latest_commit" ? "最新 commit" : "仓库元数据"],
+          ["错误代码", (data.error || {}).code, "mono"],
+          ["安全说明", (data.error || {}).message]
+        ]);
+        return;
+      }
+      const requestRows = (data.requests || []).map(item => (item.name === "repository" ? "仓库请求" : "commit 请求") + "：" + item.latency_ms + " ms").join("；");
+      renderRows("fields-P-online", [
+        ...common,
+        ["默认分支", data.default_branch, "mono"],
+        ["最新 commit", shortHash(data.latest_commit_sha), "mono"],
+        ["commit 时间", formatDate(data.latest_commit_at)],
+        ["最近推送", formatDate(data.pushed_at)],
+        ["分请求延迟", requestRows],
+        ["剩余未认证额度", data.rate_limit_remaining],
+        ["探测方式", "本机直连 api.github.com"]
+      ]);
+    }
+
+    async function checkGithub(automatic = false) {
+      if (githubInFlight) return;
+      githubInFlight = true;
+      if (!automatic) setBusy("check-P-online", true);
+      setStatus("status-P-online", "pending", automatic ? "自动刷新中" : "探测中");
+      try {
+        const data = await callApi("/api/check/github", "POST", {
+          user_id: currentUserId,
+          owner: byId("github-owner").value,
+          repo: byId("github-repo").value
+        });
+        renderGithub(data);
+      } catch (error) {
+        renderApiError("fields-P-online", "status-P-online", error);
+      } finally {
+        githubInFlight = false;
+        if (!automatic) setBusy("check-P-online", false);
+        touchUpdated();
+      }
+    }
+
+    async function checkGitLocal() {
+      ["check-P-local", "validate-P-local"].forEach(id => setBusy(id, true));
+      setStatus("status-P-local", "pending", "校验中");
+      try {
+        const data = await callApi("/api/check/git-local", "POST", { user_id: currentUserId, path: byId("git-path").value });
+        setStatus("status-P-local", data.status);
+        if (data.status === "error") {
+          renderRows("fields-P-local", [
+            ["工作区路径", data.path, "path-value"],
+            ["错误代码", (data.error || {}).code, "mono"],
+            ["安全说明", (data.error || {}).message]
+          ]);
+          return;
+        }
+        renderRows("fields-P-local", [
+          ["工作区路径", data.path, "path-value"],
+          [".git 元数据", data.git_metadata_present ? "已确认" : "未发现"],
+          ["当前分支", data.detached ? "分离 HEAD" : data.branch, "mono"],
+          ["HEAD SHA", shortHash(data.head_sha), "mono"],
+          ["dirty 文件数", data.dirty_file_count],
+          ["origin URL", data.remote_url, "path-value"],
+          ["URL 已脱敏", data.remote_url_redacted],
+          ["远端说明", data.remote_warning],
+          ["可选锁", data.optional_locks_disabled ? "已禁用" : "未确认"]
+        ]);
+      } catch (error) {
+        renderApiError("fields-P-local", "status-P-local", error);
+      } finally {
+        ["check-P-local", "validate-P-local"].forEach(id => setBusy(id, false));
+        touchUpdated();
+      }
+    }
+
+    async function loadAudit() {
+      setBusy("load-audit", true, "读取中……");
+      const container = byId("audit-content");
+      try {
+        const data = await callApi("/api/audit/recent?limit=10");
+        if (!data.events.length) {
+          container.replaceChildren();
+          const empty = document.createElement("div");
+          empty.className = "audit-empty";
+          empty.textContent = "审计库存在，但暂无 stage2 执行事件。";
+          container.appendChild(empty);
+          return;
+        }
+        const scroll = document.createElement("div");
+        scroll.className = "table-scroll";
+        const table = document.createElement("table");
+        table.className = "audit-table";
+        const head = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["序号", "记录时间", "库", "事件", "操作", "状态", "原因代码", "工具调用", "耗时", "回执哈希"].forEach(label => {
+          const cell = document.createElement("th");
+          cell.textContent = label;
+          headRow.appendChild(cell);
+        });
+        head.appendChild(headRow);
+        const body = document.createElement("tbody");
+        data.events.forEach(event => {
+          const row = document.createElement("tr");
+          [event.event_seq, formatDate(event.recorded_at), event.store || "—", event.event_type, event.operation || "—", event.status, event.reason_code || "—", event.tool_call_count, event.duration_ms + " ms", shortHash(event.receipt_hash)].forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = displayValue(value);
+            row.appendChild(cell);
+          });
+          body.appendChild(row);
+        });
+        table.append(head, body);
+        scroll.appendChild(table);
+        container.replaceChildren(scroll);
+      } catch (error) {
+        container.replaceChildren();
+        const empty = document.createElement("div");
+        empty.className = "audit-empty";
+        empty.textContent = (error.code || "AUDIT_READ_FAILED") + "：" + (error.message || "审计读取失败。");
+        container.appendChild(empty);
+      } finally {
+        setBusy("load-audit", false);
+      }
+    }
+
+    async function checkAll() {
+      if (allChecksInFlight) return;
+      allChecksInFlight = true;
+      setBusy("check-all", true, "正在检测……");
+      setGlobalMessage("正在并行执行四库只读检测；GitHub 仅发起本次两次 GET。 ");
+      const results = await Promise.allSettled([checkLexiang(), checkVault("T"), checkGithub(), checkGitLocal(), loadAudit()]);
+      const failed = results.filter(result => result.status === "rejected").length;
+      setGlobalMessage(failed ? "本轮检测结束，有 " + failed + " 项请求未完成；请查看卡片封闭错误。" : "本轮检测已完成。limited 表示能力受限或扫描不完整，不代表实时在线。", failed > 0);
+      setBusy("check-all", false);
+      allChecksInFlight = false;
+    }
+
+    function toggleGithubAuto() {
+      const minutes = byId("github-auto").checked ? (currentAutoRefreshMinutes || 5) : 0;
+      configureGithubAuto(minutes, minutes > 0);
+      setGlobalMessage(minutes > 0 ? "P 在线自动刷新已开启：每 " + minutes + " 分钟最多两次 GitHub GET，页面隐藏时暂停；点击保存按钮才会写入当前档案。" : "P 在线自动刷新已关闭；如需持久化，请点击保存为该用户偏好。");
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      byId("check-all").addEventListener("click", checkAll);
+      byId("check-M").addEventListener("click", checkLexiang);
+      byId("check-T").addEventListener("click", () => checkVault("T"));
+      byId("validate-T").addEventListener("click", () => checkVault("T"));
+      byId("check-R").addEventListener("click", () => checkVault("R"));
+      byId("validate-R").addEventListener("click", () => checkVault("R"));
+      byId("check-P-online").addEventListener("click", () => checkGithub());
+      byId("check-P-local").addEventListener("click", checkGitLocal);
+      byId("validate-P-local").addEventListener("click", checkGitLocal);
+      byId("load-audit").addEventListener("click", loadAudit);
+      byId("github-auto").addEventListener("change", toggleGithubAuto);
+      byId("save-T-pref").addEventListener("click", () => saveVaultPreference("T"));
+      byId("save-R-pref").addEventListener("click", () => saveVaultPreference("R"));
+      byId("save-P-online-pref").addEventListener("click", saveGithubPreference);
+      byId("save-P-local-pref").addEventListener("click", saveGitLocalPreference);
+      byId("user-select").addEventListener("change", async event => {
+        configureGithubAuto(0, false);
+        currentUserId = event.target.value;
+        await loadOverview();
+      });
+      byId("new-user-form").addEventListener("submit", async event => {
+        event.preventDefault();
+        setBusy("create-user", true, "创建中……");
+        try {
+          const data = await callApi("/api/users", "POST", {
+            display_name: byId("new-user-name").value,
+            role: byId("new-user-role").value
+          });
+          await loadUsers(data.user.user_id);
+          await loadOverview();
+          byId("new-user-name").value = "";
+          setGlobalMessage("用户 " + data.user.display_name + " 已创建，并继承 default 当前偏好；现已切换到该档案。");
+        } catch (error) {
+          setGlobalMessage((error.code || "USER_CREATE_FAILED") + "：" + (error.message || "用户创建失败。"), true);
+        } finally {
+          setBusy("create-user", false);
+        }
+      });
+      document.querySelectorAll(".vault-path-input").forEach(input => {
+        input.addEventListener("change", () => {
+          byId("vault-path").value = input.value;
+          byId("vault-path-r").value = input.value;
+        });
+      });
+      (async () => {
+        try {
+          await loadUsers("default");
+          await loadOverview();
+        } catch (error) {
+          setGlobalMessage((error.code || "USER_LIST_FAILED") + "：" + (error.message || "用户档案加载失败。"), true);
+        }
+      })();
+    });
+  </script>
+</body>
+</html>
