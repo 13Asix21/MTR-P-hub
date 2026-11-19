@@ -220,6 +220,96 @@
     .audit-table td { color: #475467; }
     .audit-empty { padding: 24px; color: var(--muted); text-align: center; font-size: 12px; }
     .footer { display: flex; justify-content: space-between; gap: 16px; margin: 20px 3px 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .main-tabs { display: flex; gap: 6px; margin: 18px 0; padding: 4px; width: fit-content; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); }
+    .main-tab { border: 0; border-radius: 8px; padding: 9px 18px; background: transparent; color: var(--muted); font-size: 13px; font-weight: 650; }
+    .main-tab.active { background: var(--blue-soft); color: var(--blue); }
+    [hidden] { display: none !important; }
+    .review-progress { position: sticky; top: 0; z-index: 20; margin-bottom: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 13px; background: rgba(255, 255, 255, 0.97); box-shadow: var(--shadow); }
+    .review-progress-top { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 14px; }
+    .review-progress-title { margin-right: auto; font-size: 14px; font-weight: 700; }
+    .review-scan-time { color: var(--muted); font-size: 11px; }
+    .review-track { overflow: hidden; height: 8px; margin: 11px 0 9px; border-radius: 999px; background: var(--gray-soft); }
+    .review-track-bar { width: 0; height: 100%; background: var(--blue); transition: width 160ms ease; }
+    .review-counts { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 11px; }
+    .review-counts strong { color: var(--text); }
+    .review-warning { margin-top: 8px; color: var(--amber); font-size: 11px; }
+    .review-message { min-height: 20px; margin: 8px 2px; color: var(--muted); font-size: 12px; }
+    .review-message.error { color: var(--red); }
+    .review-layout { display: grid; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); gap: 14px; align-items: start; }
+    .review-panel { border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: var(--shadow); }
+    .review-list-panel { overflow: hidden; }
+    .review-tools { display: grid; gap: 10px; padding: 13px; border-bottom: 1px solid var(--line); background: var(--surface-soft); }
+    .review-tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+    .review-tool-row .text-input { flex: 1; }
+    .review-segment { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .review-segment button { border: 0; border-radius: 6px; padding: 5px 9px; background: transparent; color: var(--muted); font-size: 11px; }
+    .review-segment button.active { background: var(--blue-soft); color: var(--blue); }
+    .review-filters { display: flex; flex-wrap: wrap; gap: 7px 10px; font-size: 11px; color: var(--muted); }
+    .review-filters label { display: inline-flex; align-items: center; gap: 4px; }
+    .review-filter-count { color: var(--muted); font-size: 11px; }
+    .review-list { max-height: 720px; overflow: auto; }
+    .review-list-empty { padding: 28px 16px; color: var(--muted); text-align: center; font-size: 12px; }
+    .review-row { display: block; width: 100%; border: 0; border-bottom: 1px solid #edf0f4; padding: 10px 13px; background: #fff; color: var(--text); text-align: left; }
+    .review-row:hover { background: #f7faff; }
+    .review-row.selected { background: var(--blue-soft); box-shadow: inset 3px 0 var(--blue); }
+    .review-row-path { display: block; overflow-wrap: anywhere; font-family: Consolas, "Cascadia Mono", "Microsoft YaHei", monospace; font-size: 11px; line-height: 1.55; }
+    .review-row-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .review-badge { display: inline-flex; border-radius: 999px; padding: 2px 7px; background: var(--gray-soft); color: var(--muted); font-size: 10px; font-weight: 650; }
+    .review-badge.approved { background: var(--green-soft); color: var(--green); }
+    .review-badge.rejected { background: var(--red-soft); color: var(--red); }
+    .review-badge.stale, .review-badge.invalid { background: var(--amber-soft); color: var(--amber); }
+    .review-badge.skipped { background: var(--gray-soft); color: var(--muted); }
+    .review-directory { border-bottom: 1px solid #edf0f4; }
+    .review-directory > summary { cursor: pointer; padding: 9px 12px; color: #475467; font-size: 11px; font-weight: 650; }
+    .review-directory .review-directory { margin-left: 12px; }
+    .review-directory .review-row { padding-left: 22px; }
+    .review-detail-panel { min-width: 0; padding: 18px; }
+    .review-detail-close { display: none; float: right; }
+    .review-detail-empty { padding: 60px 18px; color: var(--muted); text-align: center; font-size: 13px; }
+    .review-readonly { color: var(--blue); font-size: 11px; font-weight: 650; }
+    .review-detail-path { margin: 9px 0; overflow-wrap: anywhere; font-family: Consolas, "Cascadia Mono", "Microsoft YaHei", monospace; font-size: 14px; line-height: 1.6; }
+    .review-detail-meta { display: flex; flex-wrap: wrap; gap: 7px 15px; color: var(--muted); font-size: 11px; }
+    .review-stale { margin: 13px 0; padding: 11px 12px; border: 1px solid #ead6a6; border-radius: 9px; background: var(--amber-soft); color: var(--amber); font-size: 12px; }
+    .review-detail-section { margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .review-detail-section h3 { margin-bottom: 9px; }
+    .review-frontmatter { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .review-frontmatter th, .review-frontmatter td { padding: 7px; border-bottom: 1px solid #edf0f4; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+    .review-frontmatter th { width: 28%; color: var(--muted); }
+    .review-body { max-height: 540px; overflow: auto; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: #fbfcfe; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
+    .review-body pre { white-space: pre-wrap; word-break: break-word; }
+    .review-body h1, .review-body h2, .review-body h3, .review-body h4 { margin: 12px 0 7px; line-height: 1.4; }
+    .review-body p { margin: 7px 0; }
+    .review-body code { padding: 1px 4px; border-radius: 4px; background: var(--gray-soft); font-family: Consolas, monospace; }
+    .review-body blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
+    .review-raw { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: Consolas, "Cascadia Mono", "Microsoft YaHei", monospace; font-size: 11px; }
+    .review-reason { width: 100%; min-height: 82px; margin-top: 9px; padding: 9px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 12px; }
+    .review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
+    .review-actions .approve { background: var(--green-soft); color: var(--green); border-color: #b9ddc7; }
+    .review-actions .reject { background: var(--red-soft); color: var(--red); border-color: #efc5c1; }
+    .review-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    .review-toolbar-note { margin-left: auto; color: var(--muted); font-size: 11px; }
+    .review-secondary { margin-top: 14px; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    .review-secondary h3 { margin-bottom: 10px; }
+    .review-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+    .review-summary-card { padding: 10px; border-radius: 9px; background: var(--surface-soft); text-align: center; }
+    .review-summary-card strong { display: block; font-size: 20px; }
+    .review-summary-card span { color: var(--muted); font-size: 11px; }
+    .review-simple-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 11px; }
+    .review-simple-table th, .review-simple-table td { padding: 8px; border-bottom: 1px solid #edf0f4; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    .review-simple-table th { color: var(--muted); background: var(--surface-soft); }
+    .review-modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(32, 39, 53, 0.32); }
+    .review-modal { width: min(560px, 100%); max-height: 85vh; overflow: auto; padding: 20px; border-radius: 14px; background: #fff; box-shadow: 0 20px 70px rgba(32, 39, 53, 0.22); }
+    .review-modal h2 { margin-bottom: 10px; }
+    .review-modal-text { color: var(--muted); font-size: 13px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .review-modal-confirm { display: flex; gap: 7px; margin: 15px 0; color: var(--text); font-size: 12px; }
+    .review-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    @media (max-width: 1100px) {
+      .review-layout { display: block; }
+      .review-detail-panel { display: none; }
+      .review-detail-panel.mobile-open { display: block; position: fixed; inset: 66px 14px 14px; z-index: 60; overflow: auto; }
+      .review-detail-close { display: inline-flex; }
+      .review-list { max-height: none; }
+    }
     @media (max-width: 980px) {
       .store-grid { grid-template-columns: 1fr; }
       .legend { margin-left: 0; width: 100%; }
@@ -273,6 +363,12 @@
       <div class="global-message" id="global-message" role="status" aria-live="polite">正在读取默认配置……</div>
     </header>
 
+    <nav class="main-tabs" aria-label="面板视图">
+      <button type="button" class="main-tab active" id="tab-status" aria-selected="true">四库状态</button>
+      <button type="button" class="main-tab" id="tab-review" aria-selected="false">审核工作台</button>
+    </nav>
+
+    <div id="status-view">
     <div class="config-strip">
       <span><strong>配置：</strong><span id="config-summary">待加载</span></span>
       <span><strong>最近更新：</strong><span id="last-updated">尚未检测</span></span>
@@ -425,6 +521,126 @@
       </div>
       <div id="audit-content"><div class="audit-empty">尚未读取；点击右上角按钮执行只读查询。</div></div>
     </section>
+    </div>
+
+    <section id="review-view" hidden aria-label="Vault 发布前人工审核工作台">
+      <div class="review-progress">
+        <div class="review-progress-top">
+          <span class="review-progress-title" id="review-progress-title">已审 0 / 0（0%）</span>
+          <span class="review-scan-time" id="review-scan-time">尚未扫描</span>
+          <button type="button" class="button button-small button-primary" id="review-scan">扫描并载入待审清单</button>
+          <button type="button" class="button button-small" id="review-resume" disabled>从上次位置继续</button>
+        </div>
+        <div class="review-track" aria-hidden="true"><div class="review-track-bar" id="review-progress-bar"></div></div>
+        <div class="review-counts">
+          <span>通过 <strong id="review-count-approved">0</strong></span>
+          <span>拒绝 <strong id="review-count-rejected">0</strong></span>
+          <span>跳过 <strong id="review-count-skipped">0</strong></span>
+          <span>未审 <strong id="review-count-pending">0</strong></span>
+          <span>格式异常 <strong id="review-count-invalid">0</strong></span>
+          <span>内容已变更 <strong id="review-count-stale">0</strong></span>
+          <span>通过率 <strong id="review-count-pass-rate">—</strong></span>
+        </div>
+        <div class="review-warning" id="review-limit-warning" hidden>清单已达扫描上限，当前分母不是全集；请提高扫描范围后再作为发布依据。</div>
+      </div>
+      <div class="review-message" id="review-message" role="status" aria-live="polite">进入本页不会自动扫描。确认路径后，请显式点击“扫描并载入待审清单”。</div>
+      <div class="review-layout">
+        <aside class="review-panel review-list-panel" aria-label="审核清单">
+          <div class="review-tools">
+            <div class="review-tool-row">
+              <input class="text-input" id="review-search" type="search" maxlength="256" placeholder="搜索文件名或路径（含中文）" disabled>
+              <div class="review-segment" aria-label="清单展示方式">
+                <button type="button" class="active" id="review-flat">扁平</button>
+                <button type="button" id="review-tree">目录树</button>
+              </div>
+            </div>
+            <div class="review-tool-row">
+              <select class="select-input" id="review-directory" aria-label="按目录筛选"><option value="">全部目录</option></select>
+              <button type="button" class="button button-small" id="review-invalid-only" disabled>格式异常专区</button>
+            </div>
+            <div class="review-filters" aria-label="审核状态过滤">
+              <label><input type="checkbox" data-review-filter="pending">未审</label>
+              <label><input type="checkbox" data-review-filter="approved">通过</label>
+              <label><input type="checkbox" data-review-filter="rejected">拒绝</label>
+              <label><input type="checkbox" data-review-filter="skipped">跳过</label>
+              <label><input type="checkbox" data-review-filter="stale">已变更</label>
+              <label><input type="checkbox" data-review-filter="invalid">异常</label>
+            </div>
+            <span class="review-filter-count" id="review-filter-count">筛选命中 0 / 0</span>
+          </div>
+          <div class="review-list" id="review-list"><div class="review-list-empty">尚未载入清单。</div></div>
+        </aside>
+        <article class="review-panel review-detail-panel" id="review-detail-panel">
+          <button type="button" class="button button-small review-detail-close" id="review-detail-close">返回清单</button>
+          <div class="review-detail-empty" id="review-detail-empty">从左侧选择一篇，查看只读详情。</div>
+          <div id="review-detail" hidden>
+            <span class="review-readonly">只读预览，不写入 Vault</span>
+            <h2 class="review-detail-path" id="review-detail-path"></h2>
+            <div class="review-row-meta" id="review-detail-badges"></div>
+            <div class="review-detail-meta" id="review-detail-meta"></div>
+            <div class="review-stale" id="review-stale" hidden>
+              <div>内容已变更，审核记录已过期；旧结论不会进入默认放行导出。</div>
+              <button type="button" class="button button-small" id="review-stale-reset">重新审核（清除过期结论）</button>
+            </div>
+            <details class="review-detail-section" id="review-frontmatter-section" open>
+              <summary><h3>Frontmatter 原样键值</h3></summary>
+              <table class="review-frontmatter"><tbody id="review-frontmatter"></tbody></table>
+              <pre class="review-raw" id="review-frontmatter-raw"></pre>
+            </details>
+            <section class="review-detail-section">
+              <div class="review-tool-row">
+                <h3>正文</h3>
+                <div class="review-segment">
+                  <button type="button" class="active" id="review-body-rendered-tab">受限渲染</button>
+                  <button type="button" id="review-body-raw-tab">原文</button>
+                </div>
+              </div>
+              <div class="review-message" id="review-body-note"></div>
+              <div class="review-body" id="review-body-rendered"></div>
+              <pre class="review-body review-raw" id="review-body-raw" hidden></pre>
+            </section>
+            <details class="review-detail-section" id="review-reason-panel">
+              <summary>理由（可选，最多 500 字）</summary>
+              <textarea class="review-reason" id="review-reason" maxlength="500" placeholder="记录本次拍板理由；拒绝时也不强制填写。"></textarea>
+            </details>
+            <div class="review-actions">
+              <button type="button" class="button approve" data-review-action="approved" disabled>通过 A</button>
+              <button type="button" class="button reject" data-review-action="rejected" disabled>拒绝 R</button>
+              <button type="button" class="button" data-review-action="skipped" disabled>跳过 S</button>
+              <button type="button" class="button" id="review-undo" disabled>撤销 U</button>
+              <button type="button" class="button" id="review-prev" disabled>上一篇 K</button>
+              <button type="button" class="button" id="review-next" disabled>下一篇 J</button>
+            </div>
+          </div>
+        </article>
+      </div>
+      <div class="review-toolbar">
+        <select class="select-input" id="review-batch-scope" disabled><option value="filter">当前筛选结果</option><option value="directory">当前目录全部</option></select>
+        <select class="select-input" id="review-batch-action" disabled><option value="approved">批量通过</option><option value="rejected">批量拒绝</option></select>
+        <button type="button" class="button button-small" id="review-batch" disabled>批量审核</button>
+        <select class="select-input" id="review-export-include"><option value="approved">默认仅通过</option><option value="all">全部已决复盘</option></select>
+        <button type="button" class="button button-small" id="review-export" disabled>预览并导出 JSON + CSV</button>
+        <button type="button" class="button button-small" id="review-global-button" disabled>owner 全局汇总</button>
+        <button type="button" class="button button-small" id="review-coverage-button" disabled>覆盖率与时间线</button>
+        <span class="review-toolbar-note">键盘：J/K 导航，A/R/S 决策，U 撤销；输入框内不拦截按键。</span>
+      </div>
+      <section class="review-secondary" id="review-global" hidden></section>
+      <section class="review-secondary" id="review-batch-result" hidden></section>
+      <section class="review-secondary" id="review-coverage" hidden></section>
+    </section>
+
+    <div class="review-modal-backdrop" id="review-modal-backdrop" hidden>
+      <div class="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+        <h2 id="review-modal-title"></h2>
+        <div class="review-modal-text" id="review-modal-text"></div>
+        <label class="review-modal-confirm" id="review-modal-confirm-row"><input type="checkbox" id="review-modal-confirm">我已核对影响范围，确认继续。</label>
+        <div id="review-modal-extra"></div>
+        <div class="review-modal-actions">
+          <button type="button" class="button" id="review-modal-cancel">取消</button>
+          <button type="button" class="button button-primary" id="review-modal-ok" disabled>确认执行</button>
+        </div>
+      </div>
+    </div>
 
     <footer class="footer">
       <span>只读承诺：不写配置文件、不修改 Vault、不写 Decision Log、不改变 Git 工作区。</span>
@@ -449,6 +665,33 @@
     let allChecksInFlight = false;
     let currentUserId = "default";
     let currentAutoRefreshMinutes = 0;
+    const reviewState = {
+      scanned: false,
+      listing: null,
+      items: [],
+      records: { schema_version: "1", items: {}, history: [], last_position: null },
+      progress: null,
+      selectedPath: null,
+      detail: null,
+      filters: new Set(),
+      directory: "",
+      search: "",
+      viewMode: "flat",
+      actionInFlight: false,
+      detailRequest: 0,
+      bodyMode: "rendered",
+      globalSummary: null,
+      modalAction: null,
+      drafts: Object.create(null)
+    };
+    const REVIEW_STATUS_LABELS = {
+      pending: "未审",
+      approved: "通过",
+      rejected: "拒绝",
+      skipped: "跳过",
+      stale: "内容已变更",
+      invalid: "格式异常"
+    };
 
     function byId(id) {
       return document.getElementById(id);
@@ -895,6 +1138,1072 @@
       }
     }
 
+    function setReviewMessage(message, isError = false) {
+      const element = byId("review-message");
+      element.textContent = message;
+      element.className = isError ? "review-message error" : "review-message";
+    }
+
+    function switchMainTab(tab) {
+      const reviewActive = tab === "review";
+      byId("status-view").hidden = reviewActive;
+      byId("review-view").hidden = !reviewActive;
+      byId("tab-status").className = reviewActive ? "main-tab" : "main-tab active";
+      byId("tab-review").className = reviewActive ? "main-tab active" : "main-tab";
+      byId("tab-status").setAttribute("aria-selected", reviewActive ? "false" : "true");
+      byId("tab-review").setAttribute("aria-selected", reviewActive ? "true" : "false");
+    }
+
+    function currentReviewStatus(item) {
+      const record = reviewState.records.items[item.vault_relative_path];
+      if (!record) return "pending";
+      if (record.content_sha256 !== item.sha256) return "stale";
+      return record.action;
+    }
+
+    function calculateReviewProgress() {
+      const counts = { reviewed: 0, approved: 0, rejected: 0, skipped: 0, pending: 0, stale: 0, invalid: 0, pass_rate: null };
+      reviewState.items.forEach(item => {
+        if (item.parse_status !== "ok") counts.invalid += 1;
+        const status = currentReviewStatus(item);
+        if (["approved", "rejected", "skipped"].includes(status)) counts[status] += 1;
+        if (status === "stale") counts.stale += 1;
+      });
+      counts.reviewed = counts.approved + counts.rejected + counts.skipped;
+      counts.pending = reviewState.items.length - counts.reviewed;
+      counts.pass_rate = counts.reviewed ? counts.approved / counts.reviewed : null;
+      return counts;
+    }
+
+    function renderReviewProgress() {
+      const counts = reviewState.progress || calculateReviewProgress();
+      const total = reviewState.listing ? reviewState.listing.total : 0;
+      const percent = total ? counts.reviewed / total * 100 : 0;
+      byId("review-progress-title").textContent = "已审 " + counts.reviewed + " / " + total + "（" + percent.toFixed(1) + "%）";
+      byId("review-progress-bar").style.width = Math.min(100, Math.max(0, percent)) + "%";
+      ["approved", "rejected", "skipped", "pending", "stale", "invalid"].forEach(key => {
+        byId("review-count-" + key).textContent = String(counts[key] || 0);
+      });
+      byId("review-count-pass-rate").textContent = counts.pass_rate === null || counts.pass_rate === undefined ? "—" : (counts.pass_rate * 100).toFixed(1) + "%";
+      byId("review-limit-warning").hidden = !(reviewState.listing && reviewState.listing.limit_reached);
+      byId("review-resume").disabled = !reviewState.scanned;
+    }
+
+    function filteredReviewItems() {
+      const query = reviewState.search.normalize("NFC").toLocaleLowerCase();
+      return reviewState.items.filter(item => {
+        const path = item.vault_relative_path;
+        const status = currentReviewStatus(item);
+        if (reviewState.filters.size) {
+          const statusMatched = reviewState.filters.has(status);
+          const invalidMatched = reviewState.filters.has("invalid") && item.parse_status !== "ok";
+          if (!statusMatched && !invalidMatched) return false;
+        }
+        if (reviewState.directory && !(path === reviewState.directory || path.startsWith(reviewState.directory + "/"))) return false;
+        if (query && !path.normalize("NFC").toLocaleLowerCase().includes(query)) return false;
+        return true;
+      }).sort((left, right) => left.vault_relative_path.localeCompare(right.vault_relative_path, "zh-CN"));
+    }
+
+    function reviewBadge(status, label) {
+      const badge = document.createElement("span");
+      badge.className = "review-badge " + status;
+      badge.textContent = label || REVIEW_STATUS_LABELS[status] || status;
+      return badge;
+    }
+
+    function reviewRow(item) {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "review-row" + (reviewState.selectedPath === item.vault_relative_path ? " selected" : "");
+      row.dataset.reviewPath = item.vault_relative_path;
+      const path = document.createElement("span");
+      path.className = "review-row-path";
+      path.textContent = item.vault_relative_path;
+      const meta = document.createElement("span");
+      meta.className = "review-row-meta";
+      meta.appendChild(reviewBadge(currentReviewStatus(item)));
+      if (item.parse_status !== "ok") meta.appendChild(reviewBadge("invalid", item.parse_status));
+      row.append(path, meta);
+      return row;
+    }
+
+    function renderDirectoryOptions() {
+      const select = byId("review-directory");
+      const previous = reviewState.directory;
+      const directories = new Set();
+      reviewState.items.forEach(item => {
+        const parts = item.vault_relative_path.split("/");
+        for (let length = 1; length < parts.length; length += 1) directories.add(parts.slice(0, length).join("/"));
+      });
+      select.replaceChildren();
+      const all = document.createElement("option");
+      all.value = "";
+      all.textContent = "全部目录";
+      select.appendChild(all);
+      Array.from(directories).sort((left, right) => left.localeCompare(right, "zh-CN")).forEach(directory => {
+        const option = document.createElement("option");
+        option.value = directory;
+        option.textContent = directory;
+        select.appendChild(option);
+      });
+      reviewState.directory = directories.has(previous) ? previous : "";
+      select.value = reviewState.directory;
+    }
+
+    function buildReviewTree() {
+      const root = { name: "", path: "", directories: new Map(), files: [] };
+      reviewState.items.forEach(item => {
+        const parts = item.vault_relative_path.split("/");
+        let node = root;
+        for (let index = 0; index < parts.length - 1; index += 1) {
+          const path = parts.slice(0, index + 1).join("/");
+          if (!node.directories.has(path)) node.directories.set(path, { name: parts[index], path, directories: new Map(), files: [] });
+          node = node.directories.get(path);
+        }
+        node.files.push(item);
+      });
+      return root;
+    }
+
+    function reviewTreeCounts(node) {
+      const counts = { total: node.files.length, reviewed: node.files.filter(item => ["approved", "rejected", "skipped"].includes(currentReviewStatus(item))).length };
+      node.directories.forEach(child => {
+        const childCounts = reviewTreeCounts(child);
+        counts.total += childCounts.total;
+        counts.reviewed += childCounts.reviewed;
+      });
+      return counts;
+    }
+
+    function renderReviewTreeNode(node, container, visiblePaths) {
+      const visibleFiles = node.files.filter(item => visiblePaths.has(item.vault_relative_path));
+      const visibleDirectories = Array.from(node.directories.values()).filter(child => {
+        const childCounts = reviewTreeCounts(child);
+        return reviewState.items.some(item => item.vault_relative_path.startsWith(child.path + "/") && visiblePaths.has(item.vault_relative_path)) && childCounts.total > 0;
+      });
+      if (!visibleFiles.length && !visibleDirectories.length) return;
+      const details = document.createElement("details");
+      details.className = "review-directory";
+      details.open = node.path.split("/").length <= 2;
+      const summary = document.createElement("summary");
+      const counts = reviewTreeCounts(node);
+      summary.textContent = node.name + "　" + counts.reviewed + "/" + counts.total;
+      details.appendChild(summary);
+      visibleFiles.forEach(item => details.appendChild(reviewRow(item)));
+      visibleDirectories.forEach(child => renderReviewTreeNode(child, details, visiblePaths));
+      container.appendChild(details);
+    }
+
+    function renderReviewList() {
+      const container = byId("review-list");
+      container.replaceChildren();
+      const filtered = filteredReviewItems();
+      byId("review-filter-count").textContent = "筛选命中 " + filtered.length + " / " + reviewState.items.length;
+      if (!reviewState.scanned) {
+        const empty = document.createElement("div");
+        empty.className = "review-list-empty";
+        empty.textContent = "尚未载入清单。";
+        container.appendChild(empty);
+        return;
+      }
+      if (!filtered.length) {
+        const empty = document.createElement("div");
+        empty.className = "review-list-empty";
+        empty.textContent = "当前筛选无结果；请调整状态、目录或搜索条件。";
+        container.appendChild(empty);
+        return;
+      }
+      if (reviewState.viewMode === "flat") {
+        filtered.forEach(item => container.appendChild(reviewRow(item)));
+      } else {
+        const visiblePaths = new Set(filtered.map(item => item.vault_relative_path));
+        const tree = buildReviewTree();
+        tree.files.filter(item => visiblePaths.has(item.vault_relative_path)).forEach(item => container.appendChild(reviewRow(item)));
+        Array.from(tree.directories.values()).forEach(node => renderReviewTreeNode(node, container, visiblePaths));
+      }
+    }
+
+    function detailMetaSpan(text) {
+      const span = document.createElement("span");
+      span.textContent = text;
+      return span;
+    }
+
+    function updateReviewActionButtons() {
+      const hasDetail = Boolean(reviewState.detail);
+      document.querySelectorAll("[data-review-action]").forEach(button => { button.disabled = !hasDetail || reviewState.actionInFlight; });
+      byId("review-undo").disabled = !hasDetail || reviewState.actionInFlight || !(reviewState.detail && reviewState.detail.decision);
+      byId("review-stale-reset").disabled = !hasDetail || reviewState.actionInFlight;
+      const hasNavigation = filteredReviewItems().length > 0;
+      byId("review-prev").disabled = !hasDetail || reviewState.actionInFlight || !hasNavigation;
+      byId("review-next").disabled = !hasDetail || reviewState.actionInFlight || !hasNavigation;
+    }
+
+    function setReviewBodyMode(mode) {
+      const rawOnly = Boolean(reviewState.detail && reviewState.detail.body.raw_only);
+      reviewState.bodyMode = rawOnly ? "raw" : mode;
+      const raw = reviewState.bodyMode === "raw";
+      byId("review-body-rendered").hidden = raw;
+      byId("review-body-raw").hidden = !raw;
+      byId("review-body-rendered-tab").className = raw ? "" : "active";
+      byId("review-body-raw-tab").className = raw ? "active" : "";
+      byId("review-body-rendered-tab").disabled = rawOnly;
+      byId("review-body-note").textContent = rawOnly ? "格式异常，仅显示原文；仍可通过、拒绝或跳过。" : "受限 Markdown 子集渲染；HTML 与脚本一律按文本处理。";
+    }
+
+    function appendInlineMarkdown(container, text) {
+      const pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+      let cursor = 0;
+      for (const match of text.matchAll(pattern)) {
+        if (match.index > cursor) container.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+        const token = match[0];
+        const element = document.createElement(token.startsWith("**") ? "strong" : "code");
+        element.textContent = token.startsWith("**") ? token.slice(2, -2) : token.slice(1, -1);
+        container.appendChild(element);
+        cursor = match.index + token.length;
+      }
+      if (cursor < text.length) container.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    function renderReviewMarkdown(text) {
+      const container = byId("review-body-rendered");
+      container.replaceChildren();
+      const lines = text.split(/\r?\n/);
+      let codeFence = null;
+      let codeFenceLength = 0;
+      let codeLines = [];
+      let list = null;
+      let listType = "";
+      const closeList = () => { list = null; listType = ""; };
+      lines.forEach(line => {
+        const fence = line.match(/^ {0,3}(`{3,}|~{3})/);
+        if (codeFence !== null) {
+          if (fence && fence[1][0] === codeFence && fence[1].length >= codeFenceLength) {
+            const pre = document.createElement("pre");
+            const code = document.createElement("code");
+            code.textContent = codeLines.join("\n");
+            pre.appendChild(code);
+            container.appendChild(pre);
+            codeFence = null;
+            codeFenceLength = 0;
+            codeLines = [];
+          } else codeLines.push(line);
+          return;
+        }
+        if (fence) {
+          closeList();
+          codeFence = fence[1][0];
+          codeFenceLength = fence[1].length;
+          codeLines = [];
+          return;
+        }
+        const heading = line.match(/^(#{1,4})\s+(.*)$/);
+        const unordered = line.match(/^\s*[-*+]\s+(.*)$/);
+        const ordered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+        if (heading) {
+          closeList();
+          const element = document.createElement("h" + heading[1].length);
+          appendInlineMarkdown(element, heading[2]);
+          container.appendChild(element);
+          return;
+        }
+        if (unordered || ordered) {
+          const desiredType = unordered ? "ul" : "ol";
+          if (!list || listType !== desiredType) {
+            list = document.createElement(desiredType);
+            listType = desiredType;
+            container.appendChild(list);
+          }
+          const item = document.createElement("li");
+          appendInlineMarkdown(item, (unordered || ordered)[1]);
+          list.appendChild(item);
+          return;
+        }
+        closeList();
+        if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+          container.appendChild(document.createElement("hr"));
+          return;
+        }
+        if (line.startsWith(">")) {
+          const quote = document.createElement("blockquote");
+          appendInlineMarkdown(quote, line.replace(/^>\s?/, ""));
+          container.appendChild(quote);
+          return;
+        }
+        if (!line.trim()) return;
+        const paragraph = document.createElement("p");
+        appendInlineMarkdown(paragraph, line);
+        container.appendChild(paragraph);
+      });
+      if (codeFence !== null) {
+        const pre = document.createElement("pre");
+        const code = document.createElement("code");
+        code.textContent = codeLines.join("\n");
+        pre.appendChild(code);
+        container.appendChild(pre);
+      }
+    }
+
+    function renderReviewDetail(detail) {
+      const item = detail.item;
+      byId("review-detail-empty").hidden = true;
+      byId("review-detail").hidden = false;
+      byId("review-detail-panel").classList.add("mobile-open");
+      byId("review-detail-path").textContent = item.vault_relative_path;
+      const status = detail.stale ? "stale" : (detail.decision ? detail.decision.action : "pending");
+      const badges = byId("review-detail-badges");
+      badges.replaceChildren(reviewBadge(status));
+      if (item.parse_status !== "ok") badges.appendChild(reviewBadge("invalid", item.parse_status));
+      const meta = byId("review-detail-meta");
+      meta.replaceChildren(
+        detailMetaSpan("sha256: " + item.sha256),
+        detailMetaSpan("字节数: " + item.size_bytes),
+        detailMetaSpan("修改时间: " + formatDate(item.mtime)),
+        detailMetaSpan("标签: " + ((item.tags || []).join("、") || "无")),
+        detailMetaSpan("MTR: " + item.mtr_state),
+        detailMetaSpan("出链/反链: " + detail.links.out + "/" + detail.links.in)
+      );
+      byId("review-stale").hidden = !detail.stale;
+      const frontmatter = byId("review-frontmatter");
+      frontmatter.replaceChildren();
+      const entries = detail.frontmatter.entries || [];
+      if (!entries.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 3;
+        cell.textContent = detail.frontmatter.raw ? "格式异常，无法解析键值；下方保留原文。" : "无 frontmatter 键值。";
+        row.appendChild(cell);
+        frontmatter.appendChild(row);
+      } else {
+        entries.forEach(entry => {
+          const row = document.createElement("tr");
+          const key = document.createElement("th");
+          const value = document.createElement("td");
+          const type = document.createElement("td");
+          key.scope = "row";
+          key.textContent = entry.key;
+          value.textContent = entry.value;
+          type.textContent = entry.value_type;
+          row.append(key, value, type);
+          frontmatter.appendChild(row);
+        });
+      }
+      byId("review-frontmatter-raw").textContent = detail.frontmatter.raw || "";
+      byId("review-frontmatter-raw").hidden = !detail.frontmatter.raw;
+      renderReviewMarkdown(detail.body.text || "");
+      byId("review-body-raw").textContent = detail.body.text || "";
+      setReviewBodyMode(reviewState.bodyMode);
+      const hasDraft = Object.prototype.hasOwnProperty.call(reviewState.drafts, item.vault_relative_path);
+      byId("review-reason").value = hasDraft ? reviewState.drafts[item.vault_relative_path] : ((detail.decision || {}).reason || "");
+      updateReviewActionButtons();
+    }
+
+    async function selectReviewItem(path) {
+      const item = reviewState.items.find(candidate => candidate.vault_relative_path === path);
+      if (!item) return;
+      if (reviewState.selectedPath) reviewState.drafts[reviewState.selectedPath] = byId("review-reason").value;
+      reviewState.selectedPath = path;
+      reviewState.detail = null;
+      reviewState.detailRequest += 1;
+      const request = reviewState.detailRequest;
+      byId("review-detail-empty").hidden = true;
+      byId("review-detail").hidden = false;
+      byId("review-detail-panel").classList.add("mobile-open");
+      byId("review-detail-path").textContent = path;
+      byId("review-detail-badges").replaceChildren(reviewBadge(currentReviewStatus(item)));
+      byId("review-detail-meta").replaceChildren(detailMetaSpan("正在现算原始字节 SHA 并读取只读详情……"));
+      byId("review-frontmatter").replaceChildren();
+      byId("review-frontmatter-raw").textContent = "";
+      byId("review-body-rendered").replaceChildren();
+      byId("review-body-raw").textContent = "";
+      byId("review-stale").hidden = true;
+      byId("review-reason").value = Object.prototype.hasOwnProperty.call(reviewState.drafts, path) ? reviewState.drafts[path] : "";
+      updateReviewActionButtons();
+      renderReviewList();
+      try {
+        const detail = await callApi("/api/review/item?user_id=" + encodeURIComponent(currentUserId) + "&path=" + encodeURIComponent(path));
+        if (request !== reviewState.detailRequest || reviewState.selectedPath !== path) return;
+        reviewState.detail = detail;
+        renderReviewDetail(detail);
+      } catch (error) {
+        if (request !== reviewState.detailRequest) return;
+        setReviewMessage((error.code || "REVIEW_ITEM_FAILED") + "：" + (error.message || "单篇详情读取失败。"), true);
+        updateReviewActionButtons();
+      }
+    }
+
+    async function loadReviewRecords() {
+      reviewState.records = await callApi("/api/review/records?user_id=" + encodeURIComponent(currentUserId) + "&history_limit=50");
+      return reviewState.records;
+    }
+
+    async function loadReviewProgress() {
+      const data = await callApi("/api/review/progress?user_id=" + encodeURIComponent(currentUserId) + "&view=summary");
+      reviewState.progress = data.user;
+      reviewState.globalSummary = data.global;
+      return data;
+    }
+
+    async function refreshReviewUser() {
+      if (!reviewState.scanned) return;
+      try {
+        await Promise.all([loadReviewRecords(), loadReviewProgress()]);
+        renderReviewProgress();
+        renderReviewList();
+        if (reviewState.selectedPath) await selectReviewItem(reviewState.selectedPath);
+        setReviewMessage("已切换审核档案；沿用当前扫描快照，未重新扫描 Vault。");
+      } catch (error) {
+        setReviewMessage((error.code || "REVIEW_USER_REFRESH_FAILED") + "：" + (error.message || "审核档案刷新失败。"), true);
+      }
+    }
+
+    async function scanReview() {
+      setBusy("review-scan", true, "单遍扫描中……");
+      setReviewMessage("正在以一次遍历同时生成聚合统计与逐篇清单；不会写入 Vault。");
+      try {
+        const listing = await callApi("/api/review/scan", "POST", {
+          user_id: currentUserId,
+          path: byId("vault-path").value
+        });
+        reviewState.listing = listing;
+        reviewState.items = listing.items || [];
+        reviewState.scanned = true;
+        byId("review-export").disabled = false;
+        byId("review-global-button").disabled = false;
+        ["review-search", "review-invalid-only", "review-batch-scope", "review-batch-action", "review-batch", "review-coverage-button"].forEach(id => { byId(id).disabled = false; });
+        reviewState.selectedPath = null;
+        reviewState.detail = null;
+        reviewState.detailRequest += 1;
+        byId("review-detail").hidden = true;
+        byId("review-detail-empty").hidden = false;
+        byId("review-detail-panel").classList.remove("mobile-open");
+        byId("review-scan-time").textContent = "基于 " + formatDate(listing.scanned_at) + " 的扫描结果";
+        renderDirectoryOptions();
+        await Promise.all([loadReviewRecords(), loadReviewProgress()]);
+        renderReviewProgress();
+        renderReviewList();
+        const resumePath = reviewState.records.last_position;
+        const first = reviewState.items.find(item => item.vault_relative_path === resumePath) || reviewState.items.find(item => currentReviewStatus(item) === "pending") || reviewState.items[0];
+        if (first) await selectReviewItem(first.vault_relative_path);
+        const stats = listing.statistics || {};
+        setReviewMessage("清单已载入：" + listing.total + " 篇；可解析 " + (stats.parsed_files || 0) + " 篇，异常 " + (stats.error_count || 0) + " 篇。清单与聚合同遍产出。", Boolean(listing.error));
+      } catch (error) {
+        setReviewMessage((error.code || "REVIEW_SCAN_FAILED") + "：" + (error.message || "审核清单扫描失败。"), true);
+      } finally {
+        setBusy("review-scan", false);
+      }
+    }
+
+    function resumeReview() {
+      if (!reviewState.scanned) return;
+      const last = reviewState.records.last_position;
+      const item = reviewState.items.find(candidate => candidate.vault_relative_path === last) || reviewState.items[0];
+      if (!item) return;
+      selectReviewItem(item.vault_relative_path);
+      setReviewMessage(last === item.vault_relative_path ? "已回到上次审核位置。" : "上次位置已不在当前清单，已回退到首篇。");
+    }
+
+    function reviewNavigationPath(direction, pendingOnly = false) {
+      const items = filteredReviewItems();
+      if (!items.length) return null;
+      const currentIndex = items.findIndex(item => item.vault_relative_path === reviewState.selectedPath);
+      for (let step = 1; step <= items.length; step += 1) {
+        const index = (currentIndex + direction * step + items.length * 2) % items.length;
+        const candidate = items[index];
+        if (!pendingOnly || currentReviewStatus(candidate) === "pending") return candidate.vault_relative_path;
+      }
+      return null;
+    }
+
+    async function navigateReview(direction) {
+      if (reviewState.actionInFlight) return;
+      const path = reviewNavigationPath(direction, false);
+      if (path) await selectReviewItem(path);
+    }
+
+    async function saveReviewPosition(path) {
+      const data = await callApi("/api/review/position", "POST", { user_id: currentUserId, path });
+      reviewState.records.last_position = data.last_position;
+    }
+
+    async function performReviewAction(action) {
+      if (reviewState.actionInFlight || !reviewState.detail) return;
+      const detail = reviewState.detail;
+      const path = detail.item.vault_relative_path;
+      if (action === "rejected") {
+        byId("review-reason-panel").open = true;
+        byId("review-reason").focus();
+      }
+      const reason = byId("review-reason").value;
+      reviewState.drafts[path] = reason;
+      const previousRecord = reviewState.records.items[path] ? { ...reviewState.records.items[path] } : null;
+      const timestamp = new Date().toISOString();
+      reviewState.actionInFlight = true;
+      reviewState.records.items[path] = {
+        action,
+        reason,
+        content_sha256: detail.item.sha256,
+        decided_at: timestamp,
+        updated_at: timestamp
+      };
+      reviewState.progress = calculateReviewProgress();
+      renderReviewProgress();
+      renderReviewList();
+      updateReviewActionButtons();
+      let response;
+      try {
+        response = await callApi("/api/review/decide", "POST", {
+          user_id: currentUserId,
+          path,
+          content_sha256: detail.item.sha256,
+          action,
+          reason
+        });
+      } catch (error) {
+        if (previousRecord) reviewState.records.items[path] = previousRecord;
+        else delete reviewState.records.items[path];
+        reviewState.progress = calculateReviewProgress();
+        renderReviewProgress();
+        renderReviewList();
+        reviewState.actionInFlight = false;
+        if (reviewState.detail === detail) {
+          detail.decision = previousRecord;
+          renderReviewDetail(detail);
+        }
+        setReviewMessage((error.code || "REVIEW_DECIDE_FAILED") + "：" + (error.message || "审核写入失败。") + "；徽标已回滚，未前进。", true);
+        return;
+      }
+      reviewState.records.items[path] = response.item;
+      reviewState.progress = response.progress;
+      detail.decision = {
+        action: response.item.action,
+        reason: response.item.reason,
+        decided_at: response.item.decided_at
+      };
+      detail.stale = false;
+      reviewState.actionInFlight = false;
+      renderReviewProgress();
+      renderReviewList();
+      if (reviewState.detail === detail) renderReviewDetail(detail);
+      const nextPath = reviewNavigationPath(1, true) || path;
+      try {
+        await saveReviewPosition(nextPath);
+      } catch (error) {
+        setReviewMessage("审核已保存，但续审位置记录失败：" + (error.message || error.code || "未知错误"), true);
+      }
+      setReviewMessage("已保存“" + (REVIEW_STATUS_LABELS[action] || action) + "”；" + (nextPath !== path ? "即将进入下一篇未审。" : "当前筛选内已无下一篇未审。"));
+      if (nextPath !== path) await selectReviewItem(nextPath);
+    }
+
+    async function resetCurrentReview(mode) {
+      if (reviewState.actionInFlight || !reviewState.detail) return;
+      const detail = reviewState.detail;
+      const path = detail.item.vault_relative_path;
+      const previousRecord = reviewState.records.items[path] ? { ...reviewState.records.items[path] } : null;
+      if (!previousRecord && !detail.decision) {
+        setReviewMessage("该篇没有可撤销的审核记录。");
+        return;
+      }
+      reviewState.actionInFlight = true;
+      if (previousRecord) delete reviewState.records.items[path];
+      reviewState.progress = calculateReviewProgress();
+      renderReviewProgress();
+      renderReviewList();
+      updateReviewActionButtons();
+      try {
+        const response = await callApi("/api/review/reset", "POST", { user_id: currentUserId, path, mode });
+        reviewState.progress = response.progress;
+        delete reviewState.records.items[path];
+        if (response.history_tail) reviewState.records.history.unshift(response.history_tail);
+        reviewState.records.history = reviewState.records.history.slice(0, 50);
+        detail.decision = null;
+        detail.stale = false;
+        reviewState.actionInFlight = false;
+        renderReviewProgress();
+        renderReviewList();
+        if (reviewState.detail === detail) renderReviewDetail(detail);
+        setReviewMessage(mode === "stale_reset" ? "过期结论已清除，该篇已回到未审；STALE_RESET 历史已保留。" : "已撤销，该篇已回到未审；UNDO 历史保留前值。");
+      } catch (error) {
+        if (previousRecord) reviewState.records.items[path] = previousRecord;
+        reviewState.progress = calculateReviewProgress();
+        reviewState.actionInFlight = false;
+        renderReviewProgress();
+        renderReviewList();
+        if (reviewState.detail === detail) renderReviewDetail(detail);
+        setReviewMessage((error.code || "REVIEW_RESET_FAILED") + "：" + (error.message || "撤销失败。"), true);
+      }
+    }
+
+    function closeReviewModal() {
+      byId("review-modal-backdrop").hidden = true;
+      reviewState.modalAction = null;
+      byId("review-modal-ok").hidden = false;
+      byId("review-modal-cancel").textContent = "取消";
+      byId("review-modal-confirm-row").hidden = false;
+      byId("review-modal-extra").replaceChildren();
+    }
+
+    function openReviewModal(title, text, action, okLabel = "确认执行") {
+      byId("review-modal-title").textContent = title;
+      byId("review-modal-text").textContent = text;
+      byId("review-modal-extra").replaceChildren();
+      byId("review-modal-confirm-row").hidden = false;
+      byId("review-modal-confirm").checked = false;
+      byId("review-modal-ok").hidden = false;
+      byId("review-modal-ok").disabled = true;
+      byId("review-modal-ok").textContent = okLabel;
+      byId("review-modal-cancel").textContent = "取消";
+      reviewState.modalAction = action;
+      byId("review-modal-backdrop").hidden = false;
+      byId("review-modal-confirm").focus();
+    }
+
+    async function copyReviewText(text) {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const textarea = document.createElement("textarea");
+          textarea.value = text;
+          textarea.style.position = "fixed";
+          textarea.style.opacity = "0";
+          document.body.appendChild(textarea);
+          textarea.select();
+          const copied = document.execCommand("copy");
+          textarea.remove();
+          if (!copied) throw new Error("copy failed");
+        }
+        setReviewMessage("路径已复制：" + text);
+      } catch (_error) {
+        setReviewMessage("浏览器未允许自动复制，请选中弹窗中的路径手动复制。", true);
+      }
+    }
+
+    function showReviewResultModal(title, text, paths) {
+      byId("review-modal-title").textContent = title;
+      byId("review-modal-text").textContent = text;
+      byId("review-modal-confirm-row").hidden = true;
+      byId("review-modal-ok").hidden = true;
+      byId("review-modal-cancel").textContent = "关闭";
+      reviewState.modalAction = null;
+      const extra = byId("review-modal-extra");
+      extra.replaceChildren();
+      Object.entries(paths).forEach(([label, path]) => {
+        const row = document.createElement("div");
+        row.className = "review-tool-row";
+        const value = document.createElement("span");
+        value.className = "review-row-path";
+        value.textContent = label.toUpperCase() + "：" + path;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "button button-small";
+        button.textContent = "复制路径";
+        button.addEventListener("click", () => copyReviewText(path));
+        row.append(value, button);
+        extra.appendChild(row);
+      });
+      byId("review-modal-backdrop").hidden = false;
+      byId("review-modal-cancel").focus();
+    }
+
+    async function previewReviewExport() {
+      if (!reviewState.scanned) return;
+      const include = byId("review-export-include").value;
+      setBusy("review-export", true, "现算复核中……");
+      try {
+        const data = await callApi("/api/review/export", "POST", {
+          user_id: currentUserId,
+          include,
+          dry_run: true
+        });
+        const preview = data.preview;
+        const scope = include === "approved" ? "仅当前内容一致的通过篇" : "全部已决篇（stale 仅标注，不剔除）";
+        openReviewModal(
+          "确认导出审核清单",
+          "范围：" + scope + "\n将导出 " + preview.items_count + " 篇；默认通过集合已排除 " + preview.excluded_stale + " 篇内容已变更。\n将同时生成 UTF-8 JSON 与带 BOM 的 CSV，写入面板 data/exports/，不会写入 Vault。",
+          async () => {
+            const result = await callApi("/api/review/export", "POST", {
+              user_id: currentUserId,
+              include,
+              dry_run: false
+            });
+            showReviewResultModal(
+              "导出完成",
+              "已导出 " + result.counts.exported_items + " 篇；剔除内容已变更 " + result.counts.excluded_stale + " 篇。文件位于 apps/connect-panel/ 下。",
+              result.files
+            );
+            setReviewMessage("导出完成：" + result.files.json + " 与 " + result.files.csv);
+          },
+          "确认生成 JSON + CSV"
+        );
+      } catch (error) {
+        setReviewMessage((error.code || "REVIEW_EXPORT_FAILED") + "：" + (error.message || "导出预览失败。"), true);
+      } finally {
+        setBusy("review-export", false);
+      }
+    }
+
+    function reviewTableCell(text, heading = false) {
+      const cell = document.createElement(heading ? "th" : "td");
+      cell.textContent = text;
+      return cell;
+    }
+
+    function renderReviewGlobal(data) {
+      const container = byId("review-global");
+      container.replaceChildren();
+      const title = document.createElement("h3");
+      title.textContent = "owner 全局只读汇总";
+      container.appendChild(title);
+      if (!data.global) {
+        const note = document.createElement("p");
+        note.className = "review-message";
+        note.textContent = "当前用户不是 owner，仅显示自己的审核进度；不能查看其他用户明细。";
+        container.appendChild(note);
+        container.hidden = false;
+        return;
+      }
+      const global = data.global;
+      const grid = document.createElement("div");
+      grid.className = "review-summary-grid";
+      [["approved", "通过"], ["rejected", "拒绝"], ["skipped", "跳过"], ["pending", "未审"]].forEach(([key, label]) => {
+        const card = document.createElement("div");
+        card.className = "review-summary-card";
+        const value = document.createElement("strong");
+        value.textContent = global[key] + " / " + data.total;
+        const name = document.createElement("span");
+        name.textContent = label;
+        card.append(value, name);
+        grid.appendChild(card);
+      });
+      container.appendChild(grid);
+      const divergence = document.createElement("p");
+      divergence.className = "review-message";
+      divergence.textContent = "有分歧 " + global.diverged + " 篇；分歧不自动合并，也不进入任何单方结论。";
+      container.appendChild(divergence);
+      const table = document.createElement("table");
+      table.className = "review-simple-table";
+      const head = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      ["用户", "已审", "通过", "拒绝", "跳过", "未审", "已变更", "通过率"].forEach(label => headRow.appendChild(reviewTableCell(label, true)));
+      head.appendChild(headRow);
+      const body = document.createElement("tbody");
+      global.per_user.forEach(entry => {
+        const counts = entry.counts;
+        const row = document.createElement("tr");
+        [entry.user_id, counts.reviewed, counts.approved, counts.rejected, counts.skipped, counts.pending, counts.stale, counts.pass_rate === null ? "—" : (counts.pass_rate * 100).toFixed(1) + "%"].forEach(value => row.appendChild(reviewTableCell(String(value))));
+        body.appendChild(row);
+      });
+      table.append(head, body);
+      container.appendChild(table);
+      if (global.conflicts.length) {
+        const conflictTitle = document.createElement("h3");
+        conflictTitle.textContent = "分歧篇目";
+        container.appendChild(conflictTitle);
+        const conflicts = document.createElement("table");
+        conflicts.className = "review-simple-table";
+        const conflictHead = document.createElement("thead");
+        const conflictHeadRow = document.createElement("tr");
+        ["路径", "动作集合", "各用户结论"].forEach(label => conflictHeadRow.appendChild(reviewTableCell(label, true)));
+        conflictHead.appendChild(conflictHeadRow);
+        const conflictBody = document.createElement("tbody");
+        global.conflicts.forEach(conflict => {
+          const row = document.createElement("tr");
+          row.appendChild(reviewTableCell(conflict.path));
+          row.appendChild(reviewTableCell(conflict.actions.join("、")));
+          row.appendChild(reviewTableCell(JSON.stringify(conflict.decisions)));
+          conflictBody.appendChild(row);
+        });
+        conflicts.append(conflictHead, conflictBody);
+        container.appendChild(conflicts);
+      }
+      if (global.conflicts_truncated) {
+        const truncated = document.createElement("p");
+        truncated.className = "review-warning";
+        truncated.textContent = "分歧清单仅显示前 100 条，计数仍覆盖全集。";
+        container.appendChild(truncated);
+      }
+      container.hidden = false;
+    }
+
+    async function showReviewGlobal() {
+      if (!reviewState.scanned) return;
+      setBusy("review-global-button", true, "汇总中……");
+      try {
+        const data = await loadReviewProgress();
+        renderReviewProgress();
+        renderReviewGlobal(data);
+      } catch (error) {
+        setReviewMessage((error.code || "REVIEW_GLOBAL_FAILED") + "：" + (error.message || "全局汇总失败。"), true);
+      } finally {
+        setBusy("review-global-button", false);
+      }
+    }
+
+    function syncReviewFilterInputs() {
+      document.querySelectorAll("[data-review-filter]").forEach(input => {
+        input.checked = reviewState.filters.has(input.dataset.reviewFilter);
+      });
+    }
+
+    function showInvalidReviewItems() {
+      reviewState.filters = new Set(["invalid"]);
+      reviewState.search = "";
+      reviewState.directory = "";
+      byId("review-search").value = "";
+      byId("review-directory").value = "";
+      syncReviewFilterInputs();
+      renderReviewList();
+      const count = reviewState.items.filter(item => item.parse_status !== "ok").length;
+      setReviewMessage("格式异常专区：共 " + count + " 篇；无法可靠解析 frontmatter，仅按原文预览，通过、拒绝、跳过均可用。 ");
+    }
+
+    function currentBatchDirectory() {
+      if (reviewState.directory) return reviewState.directory;
+      if (!reviewState.selectedPath) return "";
+      const parts = reviewState.selectedPath.split("/");
+      return parts.slice(0, -1).join("/");
+    }
+
+    function prepareReviewBatch() {
+      if (!reviewState.scanned || reviewState.actionInFlight) return;
+      const scope = byId("review-batch-scope").value;
+      let items;
+      let scopeLabel;
+      if (scope === "filter") {
+        items = filteredReviewItems();
+        scopeLabel = "当前筛选结果";
+      } else {
+        const directory = currentBatchDirectory();
+        if (!directory) {
+          setReviewMessage("请先选择目录或一篇笔记，再按当前目录批量审核。", true);
+          return;
+        }
+        items = reviewState.items.filter(item => item.vault_relative_path.startsWith(directory + "/"));
+        scopeLabel = "目录 " + directory + " 全部";
+      }
+      if (!items.length) {
+        setReviewMessage("批量范围为空，请调整筛选或目录。", true);
+        return;
+      }
+      const action = byId("review-batch-action").value;
+      const reason = byId("review-reason").value;
+      const invalid = items.filter(item => item.parse_status !== "ok").length;
+      const batches = Math.ceil(items.length / 500);
+      openReviewModal(
+        "确认批量审核",
+        "范围：" + scopeLabel + "\n将对 " + items.length + " 篇执行“" + (REVIEW_STATUS_LABELS[action] || action) + "”，其中含 " + invalid + " 篇格式异常。\n" + (batches > 1 ? "超过单批上限，将自动分 " + batches + " 批提交，每批最多 500 篇。\n" : "") + "每篇独立复核 SHA；失败篇不影响其余篇落账，结果会逐篇汇总。",
+        () => executeReviewBatch(items, action, reason),
+        "确认执行批量审核"
+      );
+    }
+
+    function mergeBatchSummary(target, incoming) {
+      target.total += incoming.total;
+      target.succeeded += incoming.succeeded;
+      target.failed += incoming.failed;
+      target.content_changed += incoming.content_changed;
+      target.invalid_yaml.decided += incoming.invalid_yaml.decided;
+      target.invalid_yaml.failed += incoming.invalid_yaml.failed;
+      Object.entries(incoming.by_error).forEach(([code, count]) => {
+        target.by_error[code] = (target.by_error[code] || 0) + count;
+      });
+    }
+
+    function renderBatchResult(results, summary) {
+      const container = byId("review-batch-result");
+      container.replaceChildren();
+      const title = document.createElement("h3");
+      title.textContent = "批量审核结果";
+      const text = document.createElement("p");
+      text.className = "review-message";
+      text.textContent = "总计 " + summary.total + " 篇；成功 " + summary.succeeded + "，失败 " + summary.failed + "，内容已变更 " + summary.content_changed + "；INVALID_YAML 成功 " + summary.invalid_yaml.decided + "、失败 " + summary.invalid_yaml.failed + "。";
+      container.append(title, text);
+      const failures = results.filter(result => result.status === "error");
+      if (failures.length) {
+        const table = document.createElement("table");
+        table.className = "review-simple-table";
+        const head = document.createElement("thead");
+        const headRow = document.createElement("tr");
+        ["路径", "失败原因码"].forEach(label => headRow.appendChild(reviewTableCell(label, true)));
+        head.appendChild(headRow);
+        const body = document.createElement("tbody");
+        failures.slice(0, 100).forEach(result => {
+          const row = document.createElement("tr");
+          row.appendChild(reviewTableCell(result.path));
+          row.appendChild(reviewTableCell(result.code || "UNKNOWN"));
+          body.appendChild(row);
+        });
+        table.append(head, body);
+        container.appendChild(table);
+        if (failures.length > 100) {
+          const note = document.createElement("p");
+          note.className = "review-warning";
+          note.textContent = "失败明细仅显示前 100 条；summary 计数覆盖全部批次。";
+          container.appendChild(note);
+        }
+      }
+      container.hidden = false;
+    }
+
+    async function executeReviewBatch(items, action, reason) {
+      const summary = { total: 0, succeeded: 0, failed: 0, content_changed: 0, invalid_yaml: { decided: 0, failed: 0 }, by_error: {} };
+      const results = [];
+      reviewState.actionInFlight = true;
+      updateReviewActionButtons();
+      try {
+        for (let offset = 0; offset < items.length; offset += 500) {
+          const chunk = items.slice(offset, offset + 500);
+          byId("review-modal-text").textContent = "正在提交第 " + (Math.floor(offset / 500) + 1) + " 批，共 " + Math.ceil(items.length / 500) + " 批；本批 " + chunk.length + " 篇。";
+          let response;
+          try {
+            response = await callApi("/api/review/batch", "POST", {
+              user_id: currentUserId,
+              action,
+              reason,
+              items: chunk.map(item => ({ path: item.vault_relative_path, content_sha256: item.sha256 }))
+            });
+          } catch (error) {
+            error.message = "第 " + (Math.floor(offset / 500) + 1) + " 批中断：" + (error.message || "请求失败") + "；此前批次结果已在下方汇总。";
+            throw error;
+          }
+          results.push(...response.results);
+          mergeBatchSummary(summary, response.summary);
+          reviewState.progress = response.progress;
+          renderReviewProgress();
+          renderBatchResult(results, summary);
+        }
+        await Promise.all([loadReviewRecords(), loadReviewProgress()]);
+        renderReviewProgress();
+        renderReviewList();
+        if (reviewState.selectedPath) await selectReviewItem(reviewState.selectedPath);
+        renderBatchResult(results, summary);
+        showReviewResultModal(
+          "批量审核完成",
+          "共处理 " + summary.total + " 篇：成功 " + summary.succeeded + "，失败 " + summary.failed + "；INVALID_YAML 成功 " + summary.invalid_yaml.decided + "、失败 " + summary.invalid_yaml.failed + "。失败篇保留原结论，未被静默跳过。",
+          {}
+        );
+        setReviewMessage("批量审核完成：成功 " + summary.succeeded + "，失败 " + summary.failed + "；逐篇结果已汇总。", summary.failed > 0);
+      } catch (error) {
+        await Promise.allSettled([loadReviewRecords(), loadReviewProgress()]);
+        renderReviewProgress();
+        renderReviewList();
+        renderBatchResult(results, summary);
+        showReviewResultModal(
+          "批量审核中断",
+          (error.code || "REVIEW_BATCH_FAILED") + "：" + (error.message || "请求失败") + "\n已完成批次：成功 " + summary.succeeded + " 篇、失败 " + summary.failed + " 篇。为避免重复改判，请核对结果后重新发起新的批量范围。",
+          {}
+        );
+        setReviewMessage("批量审核中断；已落账批次与失败篇均已汇总，未自动重试。", true);
+        return;
+      } finally {
+        reviewState.actionInFlight = false;
+        updateReviewActionButtons();
+      }
+    }
+
+    function renderReviewCoverage(data) {
+      const container = byId("review-coverage");
+      container.replaceChildren();
+      const title = document.createElement("h3");
+      title.textContent = "目录覆盖率、异常分布与最近 20 条动作";
+      container.appendChild(title);
+      const table = document.createElement("table");
+      table.className = "review-simple-table";
+      const head = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      ["目录", "总数", "已审", "覆盖率", "通过", "拒绝", "跳过", "未审", "已变更", "异常", "通过率", "操作"].forEach(label => headRow.appendChild(reviewTableCell(label, true)));
+      head.appendChild(headRow);
+      const body = document.createElement("tbody");
+      Object.entries(data.directories).forEach(([directory, counts]) => {
+        const row = document.createElement("tr");
+        const coverage = counts.total ? (counts.reviewed / counts.total * 100).toFixed(1) + "%" : "0%";
+        const passRate = counts.reviewed ? (counts.approved / counts.reviewed * 100).toFixed(1) + "%" : "—";
+        [directory || "（根目录）", counts.total, counts.reviewed, coverage, counts.approved, counts.rejected, counts.skipped, counts.pending, counts.stale, counts.invalid, passRate].forEach(value => row.appendChild(reviewTableCell(String(value))));
+        const actionCell = document.createElement("td");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "button button-small";
+        button.textContent = "筛选此目录";
+        button.addEventListener("click", () => {
+          reviewState.directory = directory;
+          byId("review-directory").value = directory;
+          renderReviewList();
+          setReviewMessage("已下钻目录：" + (directory || "根目录"));
+        });
+        actionCell.appendChild(button);
+        row.appendChild(actionCell);
+        body.appendChild(row);
+      });
+      table.append(head, body);
+      container.appendChild(table);
+
+      const invalidTitle = document.createElement("h3");
+      invalidTitle.textContent = "异常类型分布";
+      container.appendChild(invalidTitle);
+      const distribution = {};
+      reviewState.items.forEach(item => {
+        if (item.parse_status !== "ok") distribution[item.parse_status] = (distribution[item.parse_status] || 0) + 1;
+      });
+      const invalidTable = document.createElement("table");
+      invalidTable.className = "review-simple-table";
+      const invalidBody = document.createElement("tbody");
+      const entries = Object.entries(distribution);
+      if (!entries.length) {
+        const row = document.createElement("tr");
+        row.appendChild(reviewTableCell("无格式异常"));
+        invalidBody.appendChild(row);
+      } else {
+        entries.forEach(([code, count]) => {
+          const row = document.createElement("tr");
+          row.appendChild(reviewTableCell(code));
+          row.appendChild(reviewTableCell(String(count)));
+          invalidBody.appendChild(row);
+        });
+      }
+      invalidTable.appendChild(invalidBody);
+      container.appendChild(invalidTable);
+
+      const timelineTitle = document.createElement("h3");
+      timelineTitle.textContent = "最近 20 条审核动作（仅路径与动作）";
+      container.appendChild(timelineTitle);
+      const timeline = document.createElement("table");
+      timeline.className = "review-simple-table";
+      const timelineHead = document.createElement("thead");
+      const timelineHeadRow = document.createElement("tr");
+      ["时间", "路径", "操作", "前动作", "目标动作"].forEach(label => timelineHeadRow.appendChild(reviewTableCell(label, true)));
+      timelineHead.appendChild(timelineHeadRow);
+      const timelineBody = document.createElement("tbody");
+      reviewState.records.history.slice(0, 20).forEach(event => {
+        const row = document.createElement("tr");
+        [formatDate(event.at), event.path, event.op, event.from || "—", event.to || "—"].forEach(value => row.appendChild(reviewTableCell(String(value))));
+        timelineBody.appendChild(row);
+      });
+      timeline.append(timelineHead, timelineBody);
+      container.appendChild(timeline);
+      container.hidden = false;
+    }
+
+    async function showReviewCoverage() {
+      if (!reviewState.scanned) return;
+      setBusy("review-coverage-button", true, "计算中……");
+      try {
+        const [data] = await Promise.all([
+          callApi("/api/review/progress?user_id=" + encodeURIComponent(currentUserId) + "&view=directory"),
+          loadReviewRecords()
+        ]);
+        reviewState.progress = data.user;
+        reviewState.globalSummary = data.global;
+        renderReviewProgress();
+        renderReviewCoverage(data);
+      } catch (error) {
+        setReviewMessage((error.code || "REVIEW_COVERAGE_FAILED") + "：" + (error.message || "覆盖率计算失败。"), true);
+      } finally {
+        setBusy("review-coverage-button", false);
+      }
+    }
+
     async function checkAll() {
       if (allChecksInFlight) return;
       allChecksInFlight = true;
@@ -924,6 +2233,107 @@
       byId("check-P-local").addEventListener("click", checkGitLocal);
       byId("validate-P-local").addEventListener("click", checkGitLocal);
       byId("load-audit").addEventListener("click", loadAudit);
+      byId("tab-status").addEventListener("click", () => switchMainTab("status"));
+      byId("tab-review").addEventListener("click", () => switchMainTab("review"));
+      byId("review-scan").addEventListener("click", scanReview);
+      byId("review-resume").addEventListener("click", resumeReview);
+      byId("review-flat").addEventListener("click", () => {
+        reviewState.viewMode = "flat";
+        byId("review-flat").className = "active";
+        byId("review-tree").className = "";
+        renderReviewList();
+      });
+      byId("review-tree").addEventListener("click", () => {
+        reviewState.viewMode = "tree";
+        byId("review-flat").className = "";
+        byId("review-tree").className = "active";
+        renderReviewList();
+      });
+      byId("review-list").addEventListener("click", event => {
+        const row = event.target.closest("button[data-review-path]");
+        if (row) selectReviewItem(row.dataset.reviewPath);
+      });
+      byId("review-directory").addEventListener("change", event => {
+        reviewState.directory = event.target.value;
+        renderReviewList();
+      });
+      document.querySelectorAll("[data-review-filter]").forEach(input => {
+        input.addEventListener("change", () => {
+          if (input.checked) reviewState.filters.add(input.dataset.reviewFilter);
+          else reviewState.filters.delete(input.dataset.reviewFilter);
+          renderReviewList();
+        });
+      });
+      byId("review-detail-close").addEventListener("click", () => byId("review-detail-panel").classList.remove("mobile-open"));
+      document.querySelectorAll("[data-review-action]").forEach(button => {
+        button.addEventListener("click", () => performReviewAction(button.dataset.reviewAction));
+      });
+      byId("review-undo").addEventListener("click", () => resetCurrentReview("undo"));
+      byId("review-stale-reset").addEventListener("click", () => resetCurrentReview("stale_reset"));
+      byId("review-prev").addEventListener("click", () => navigateReview(-1));
+      byId("review-next").addEventListener("click", () => navigateReview(1));
+      byId("review-body-rendered-tab").addEventListener("click", () => setReviewBodyMode("rendered"));
+      byId("review-body-raw-tab").addEventListener("click", () => setReviewBodyMode("raw"));
+      byId("review-reason").addEventListener("input", event => {
+        if (reviewState.selectedPath) reviewState.drafts[reviewState.selectedPath] = event.target.value;
+      });
+      byId("review-search").addEventListener("input", event => {
+        reviewState.search = event.target.value;
+        renderReviewList();
+      });
+      byId("review-invalid-only").addEventListener("click", showInvalidReviewItems);
+      byId("review-batch").addEventListener("click", prepareReviewBatch);
+      byId("review-coverage-button").addEventListener("click", showReviewCoverage);
+      byId("review-export").addEventListener("click", previewReviewExport);
+      byId("review-global-button").addEventListener("click", showReviewGlobal);
+      byId("review-modal-cancel").addEventListener("click", closeReviewModal);
+      byId("review-modal-backdrop").addEventListener("click", event => {
+        if (event.target === byId("review-modal-backdrop")) closeReviewModal();
+      });
+      byId("review-modal-confirm").addEventListener("change", event => {
+        byId("review-modal-ok").disabled = !event.target.checked;
+      });
+      byId("review-modal-ok").addEventListener("click", async () => {
+        const action = reviewState.modalAction;
+        if (!action) return;
+        const button = byId("review-modal-ok");
+        const label = button.textContent;
+        button.disabled = true;
+        button.textContent = "处理中……";
+        try {
+          await action();
+        } catch (error) {
+          byId("review-modal-text").textContent = (error.code || "REVIEW_ACTION_FAILED") + "：" + (error.message || "操作失败，未确认完成。");
+          if (reviewState.modalAction) button.disabled = !byId("review-modal-confirm").checked;
+        } finally {
+          if (reviewState.modalAction) {
+            button.textContent = label;
+            button.disabled = !byId("review-modal-confirm").checked;
+          }
+        }
+      });
+      document.addEventListener("keydown", event => {
+        if (!byId("review-modal-backdrop").hidden) {
+          if (event.key === "Escape") closeReviewModal();
+          return;
+        }
+        if (byId("review-view").hidden || reviewState.actionInFlight) return;
+        if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+        if (event.target && event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+        const key = event.key.toUpperCase();
+        const handlers = {
+          J: () => navigateReview(1),
+          K: () => navigateReview(-1),
+          A: () => performReviewAction("approved"),
+          R: () => performReviewAction("rejected"),
+          S: () => performReviewAction("skipped"),
+          U: () => resetCurrentReview("undo")
+        };
+        if (handlers[key]) {
+          event.preventDefault();
+          handlers[key]();
+        }
+      });
       byId("github-auto").addEventListener("change", toggleGithubAuto);
       byId("save-T-pref").addEventListener("click", () => saveVaultPreference("T"));
       byId("save-R-pref").addEventListener("click", () => saveVaultPreference("R"));
@@ -933,6 +2343,7 @@
         configureGithubAuto(0, false);
         currentUserId = event.target.value;
         await loadOverview();
+        await refreshReviewUser();
       });
       byId("new-user-form").addEventListener("submit", async event => {
         event.preventDefault();
@@ -944,6 +2355,7 @@
           });
           await loadUsers(data.user.user_id);
           await loadOverview();
+          await refreshReviewUser();
           byId("new-user-name").value = "";
           setGlobalMessage("用户 " + data.user.display_name + " 已创建，并继承 default 当前偏好；现已切换到该档案。");
         } catch (error) {

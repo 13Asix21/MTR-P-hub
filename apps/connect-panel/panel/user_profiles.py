@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
 import tempfile
 import threading
 import uuid
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .review_store import ReviewState
 
 from .github_check import validate_github_coordinates
 from .settings import PanelError, normalize_local_absolute_path
@@ -18,7 +23,7 @@ from .settings import PanelError, normalize_local_absolute_path
 
 _USER_ID_PATTERN = re.compile(r"^[a-z0-9-]{1,32}$")
 _ROLES = ("owner", "editor", "viewer")
-_MAX_PROFILE_BYTES = 1_000_000
+_MAX_PROFILE_BYTES = 10_000_000
 _MAX_USERS = 100
 
 
@@ -48,6 +53,7 @@ class UserProfile:
     display_name: str
     role: str
     preferences: UserPreferences
+    review: dict[str, Any] | None = None
 
 
 def preferences_to_dict(preferences: UserPreferences) -> dict[str, Any]:
@@ -145,15 +151,29 @@ class ProfileStore:
     def _parse_user(cls, raw: Any) -> UserProfile:
         if not isinstance(raw, dict):
             raise PanelError("PROFILE_STORE_INVALID", "用户档案结构无效。", 503)
-        expected = {"user_id", "display_name", "role", "preferences"}
-        if set(raw) != expected:
+        required = {"user_id", "display_name", "role", "preferences"}
+        if not required.issubset(raw) or set(raw) - required - {"review"}:
             raise PanelError("PROFILE_STORE_INVALID", "用户档案字段不完整或包含未知字段。", 503)
         return UserProfile(
             user_id=cls._validate_user_id(raw.get("user_id")),
             display_name=cls._validate_display_name(raw.get("display_name")),
             role=cls._validate_role(raw.get("role")),
             preferences=cls._parse_preferences(raw.get("preferences")),
+            review=copy.deepcopy(raw.get("review")) if "review" in raw else None,
         )
+
+    @staticmethod
+    def _user_to_store_dict(profile: UserProfile) -> dict[str, Any]:
+        """序列化完整持久化字段；公共 API 的 profile_to_dict 不暴露审核台账。"""
+
+        data = profile_to_dict(profile)
+        data["review"] = copy.deepcopy(profile.review) if profile.review is not None else {
+            "schema_version": "1",
+            "items": {},
+            "history": [],
+            "last_position": None,
+        }
+        return data
 
     def _read_unlocked(self) -> tuple[dict[str, Any], list[UserProfile]]:
         try:
@@ -223,9 +243,9 @@ class ProfileStore:
                 if existing is not None:
                     return existing
                 users.append(default)
-                raw["users"] = [profile_to_dict(item) for item in users]
+                raw["users"] = [self._user_to_store_dict(item) for item in users]
             else:
-                raw = {"schema_version": "1", "users": [profile_to_dict(default)]}
+                raw = {"schema_version": "1", "users": [self._user_to_store_dict(default)]}
             self._write_unlocked(raw)
             return default
 
@@ -242,6 +262,44 @@ class ProfileStore:
             if user is None:
                 raise PanelError("USER_NOT_FOUND", "指定用户不存在。", 404)
             return user
+
+    def get_user_review(self, user_id: str) -> ReviewState:
+        """在档案锁内读取并深度校验指定用户的审核状态。"""
+
+        from .review_store import validate_state
+
+        selected_id = self._validate_user_id(user_id)
+        with self._lock:
+            _raw, users = self._read_unlocked()
+            user = next((item for item in users if item.user_id == selected_id), None)
+            if user is None:
+                raise PanelError("USER_NOT_FOUND", "指定用户不存在。", 404)
+            return validate_state(user.review)
+
+    def update_user_review(
+        self,
+        user_id: str,
+        mutator: Callable[[ReviewState], ReviewState],
+    ) -> ReviewState:
+        """在同一进程锁内完成审核状态的读取、校验、变更与原子写回。"""
+
+        from .review_store import state_to_dict, validate_state
+
+        selected_id = self._validate_user_id(user_id)
+        with self._lock:
+            raw, users = self._read_unlocked()
+            index = next(
+                (position for position, user in enumerate(users) if user.user_id == selected_id),
+                None,
+            )
+            if index is None:
+                raise PanelError("USER_NOT_FOUND", "指定用户不存在。", 404)
+            current = validate_state(users[index].review)
+            updated = validate_state(mutator(current))
+            users[index] = replace(users[index], review=state_to_dict(updated))
+            raw["users"] = [self._user_to_store_dict(item) for item in users]
+            self._write_unlocked(raw)
+            return updated
 
     def create_user(self, display_name: str, role: str = "viewer") -> UserProfile:
         clean_name = self._validate_display_name(display_name)
@@ -267,7 +325,7 @@ class ProfileStore:
                 preferences=default.preferences,
             )
             users.append(user)
-            raw["users"] = [profile_to_dict(item) for item in users]
+            raw["users"] = [self._user_to_store_dict(item) for item in users]
             self._write_unlocked(raw)
             return user
 
@@ -284,14 +342,9 @@ class ProfileStore:
             merged = preferences_to_dict(users[index].preferences)
             merged.update(patch)
             preferences = self._parse_preferences(merged)
-            updated = UserProfile(
-                user_id=users[index].user_id,
-                display_name=users[index].display_name,
-                role=users[index].role,
-                preferences=preferences,
-            )
+            updated = replace(users[index], preferences=preferences)
             users[index] = updated
-            raw["users"] = [profile_to_dict(item) for item in users]
+            raw["users"] = [self._user_to_store_dict(item) for item in users]
             self._write_unlocked(raw)
             return updated
 

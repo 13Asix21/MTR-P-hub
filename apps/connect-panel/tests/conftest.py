@@ -24,6 +24,7 @@ from qa_support import (
     AUDIT_DB,
     AUDIT_SHM,
     AUDIT_WAL,
+    EXPORTS_DIR,
     PANEL_VENV_PYTHON,
     USERS_DIR,
     USERS_JSON,
@@ -44,6 +45,7 @@ def server(tmp_path_factory: pytest.TempPathFactory):
     users_backup: Path = tmp_path_factory.mktemp("qa-users-backup") / "users.json"
     original_bytes = USERS_JSON.read_bytes()
     users_backup.write_bytes(original_bytes)
+    exports_before = {path.name for path in EXPORTS_DIR.glob("*")} if EXPORTS_DIR.is_dir() else set()
 
     harness = PanelServer(pick_free_port())
     harness.baseline = {
@@ -67,6 +69,13 @@ def server(tmp_path_factory: pytest.TempPathFactory):
                 stray.unlink()
             except OSError:
                 pass
+        if EXPORTS_DIR.is_dir():
+            for stray in EXPORTS_DIR.glob("*"):
+                if stray.name not in exports_before and stray.is_file():
+                    try:
+                        stray.unlink()
+                    except OSError:
+                        pass
         shutil.rmtree(USERS_DIR / "qa-escape-scratch", ignore_errors=True)
         restored = USERS_JSON.read_bytes()
         assert restored == original_bytes, "teardown 未能恢复 users.json 原始字节"

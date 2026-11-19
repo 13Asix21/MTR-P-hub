@@ -1,6 +1,6 @@
 # MTR-P 四库只读连接面板
 
-这是位于 `apps/connect-panel/` 的独立本地面板，用来加载主仓配置，并对 M / T / R / P 四库做能力边界明确的连接校验。后端使用 FastAPI，前端是零 CDN、零 npm、零构建步骤的单文件 HTML。
+这是位于 `apps/connect-panel/` 的独立本地面板，用来加载主仓配置，对 M / T / R / P 四库做能力边界明确的连接校验，并提供 Vault 进入 M 库前的人工审核工作台。后端使用 FastAPI，前端是零 CDN、零 npm、零构建步骤的单文件 HTML。审核工作台只产生审核台账与放行清单，不执行发布。
 
 ## 启动
 
@@ -21,7 +21,7 @@
 
 ## 多用户档案层预留
 
-首次启动或档案缺少 default 时会自动初始化/补建 `apps/connect-panel/data/users.json`；本目录 `.gitignore` 排除整个 `data/`，不会修改仓库根 `.gitignore`。这是面板唯一允许写入的数据位置，采用进程内锁、UTF-8 和临时文件原子替换。default 用户初始内容示例（实际路径会经 `pathlib` 归一化）：
+首次启动或档案缺少 default 时会自动初始化/补建 `apps/connect-panel/data/users.json`；本目录 `.gitignore` 排除整个 `data/`，不会修改仓库根 `.gitignore`。`users.json` 只有注入的 `ProfileStore` 单例持锁写入，采用 UTF-8、临时文件、`fsync` 和原子替换；另一处允许写入的位置是审核导出自管目录 `data/exports/`。default 用户初始内容示例（实际路径会经 `pathlib` 归一化）：
 
 ```json
 {
@@ -36,6 +36,12 @@
         "git_local_path": "E:/ASoftwareManage/Agithub/MTR-P-hub",
         "github_repos": [{"owner": "13Asix21", "repo": "MTR-P"}],
         "auto_refresh_minutes": 0
+      },
+      "review": {
+        "schema_version": "1",
+        "items": {},
+        "history": [],
+        "last_position": null
       }
     }
   ]
@@ -57,6 +63,33 @@
 | P 本地 | 只读执行 `status --porcelain=v2 --branch`、`remote get-url origin` | 显示 `.git`、分支、HEAD、dirty 文件数和脱敏 origin URL；设置 `GIT_OPTIONAL_LOCKS=0`，绝不 pull / push / checkout |
 
 T/R 分类互斥：同时具有 trial 和 rarely 的笔记只进入“双标签冲突”，不重复进入 T 或 R 数量。Markdown 解析复用 editable 安装的主仓 `mtrp_hub.adapters.obsidian_markdown.ObsidianMarkdownParser`，包括 frontmatter、行内标签、代码排除、UTF-8 BOM 和 CRLF 语义；解析器不可导入时返回明确的 `PARSER_UNAVAILABLE`，不会崩溃或改用静默的伪造结果。
+
+## 审核工作台（review_workbench）
+
+顶部“审核工作台”tab 不会在切换时自动扫描；必须显式点击“扫描并载入待审清单”。扫描采用 `vault_check._scan_vault_once` 单遍引擎：同一批 `on_file` 回调同时产生 v1 同键 `statistics` 与逐篇 `items[]`，不是先聚合再扫第二遍。wiki 反链只在遍历后基于内存索引计算；详情、写动作和导出允许单文件现算，不构成全树重扫。
+
+- 队列 = managed roots 内实际扫描到的全部 `.md`，含 `INVALID_YAML` 等异常篇；排除目录不入队。当前真实 Vault 的 2026-11-19 实测为 1832 = 1820 可解析 + 12 异常，该数字不是硬编码，Vault 变化后以新扫描为准。
+- 每条清单含 NFC POSIX 相对路径、原始字节 SHA-256、字节数、mtime、原始标签、MTR 状态、解析状态与出/反链。解析失败篇 `mtr_state="unknown"`；`INVALID_YAML` 可按原文预览，且通过/拒绝/跳过均不受限。
+- 详情现算 SHA，返回 frontmatter 原文和有序键值、正文、文件元信息与用户结论。正文只在本次响应出现，不写 users.json、不写日志；前端用白名单 DOM 渲染受限 Markdown，原文始终可切换。
+- 单篇动作必须携带客户端所见 SHA。服务端重新读取原始字节，不一致即 `CONTENT_CHANGED(409)`，不落记录、不追加历史。审核记录只保存动作、可选理由、内容 SHA 与 UTC 时间，不保存正文。
+
+### 进度、状态与多用户
+
+每用户 `review` 独立保存 `schema_version / items / history / last_position`；未审就是 items 中无键。历史包含 `DECIDE / UNDO / STALE_RESET`，保留最近 200 条；理由最多 500 字。档案读取上限为 10MB，损坏的 review 返回 `REVIEW_RECORD_INVALID`，不静默重建。
+
+进度唯一口径：`total = 当前清单篇数`；`reviewed = approved + rejected + skipped`；`pending = total - reviewed`；通过率 = approved ÷ reviewed（reviewed=0 时为 null）。STALE 是“记录 SHA 与当前扫描快照 SHA 不一致”的派生态，不落盘、不计入已审，也不减少分母；详情和导出会进一步单文件现算复核。脱队历史记录不掺入当前进度。
+
+角色仍不用于登录鉴权，但 owner 可查看只读全局汇总、按用户分解和分歧清单；非 owner 的 `global` 为 null。同一篇多人结论不同只标记分歧，不自动合并。`last_position` 支持续审，重扫后失效时前端回退首篇。
+
+### 批量与目录覆盖率
+
+批量请求由前端按当前筛选或目录显式组装，每篇带所见 SHA；超过 500 时前端分批，服务端若单批收到 501 篇以上则整批返回 `REVIEW_BATCH_LIMIT(413)`，不隐式截断。批内缺文件、越出清单、超限或 SHA 变化逐篇报错，正常篇在同一锁内逐篇落记录并只做一次档案原子替换；摘要单列 `INVALID_YAML` 成功/失败数。`progress?view=directory` 按文件直接父目录给出互不重叠的覆盖率，目录 total 之和等于清单 total。
+
+### 导出格式
+
+默认 `include=approved` 只导出动作仍为 approved 且导出时现算 SHA 与记录一致的篇目；stale 被剔除并计入 `excluded_stale`。`include=all` 导出全部已决篇并给每项增加 `stale: true|false`，不剔除。`dry_run=true` 只预览，不创建文件。
+
+正式导出在 `apps/connect-panel/data/exports/` 生成同 stem 的 JSON 与 CSV：`review-<user_id>-<YYYYMMDD-HHMMSS>(-n?).json|csv`，同秒重名自动追加序号。JSON 顶层含 `schema_version / exported_at / user_id / vault_id / scope / counts / items`；`vault_id` 是 resolved Vault 绝对路径 SHA-256 的前 16 位。CSV 使用 UTF-8 BOM、CRLF 和 RFC4180 引号规则，tags 以分号连接，数据行数与 JSON items 严格一致（另有表头）。写盘使用双临时文件、`fsync` 和替换，失败清理本次半套产物。**不会自动删除历史导出**；需要控制份数时由人工清理，整个 `data/` 均不入库。
 
 ## API
 
@@ -87,6 +120,36 @@ T/R 分类互斥：同时具有 trial 和 rarely 的笔记只进入“双标签�
 
 原检查端点的 `user_id` 均缺省 `default`。“校验此路径”只发起临时检查，只有前端“保存为该用户偏好”按钮或显式 PATCH 才写入 users.json。
 
+审核端点如下，均走同一包裹、严格请求模型与封闭错误边界；写动作是面板自管档案动作，不是 Vault 写入：
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `POST /api/review/scan` | 单遍全量重扫并替换进程内单槽缓存，同时返回 statistics、counts 与 items |
+| `GET /api/review/listing` | 读取当前扫描快照；空缓存返回 `REVIEW_SCAN_REQUIRED` |
+| `GET /api/review/item?user_id&path` | 单篇现算详情、frontmatter、正文、链接、用户结论与精确 stale |
+| `POST /api/review/decide` | 通过/拒绝/跳过；请求 SHA 与服务端现算不一致则拒绝写入 |
+| `POST /api/review/reset` | `undo` 或 `stale_reset`，删除当前键、保留前值历史并回到未审 |
+| `GET /api/review/records?user_id&history_limit` | 当前用户完整 items、逆序历史与 last_position，不需要扫描缓存 |
+| `POST /api/review/position` | 设置或清除当前用户续审位置 |
+| `GET /api/review/progress?user_id&view` | `summary` 用户/owner 全局汇总；`directory` 另含目录覆盖率 |
+| `POST /api/review/batch` | 单批最多 500 篇，逐篇预检、一次锁内落账、逐篇结果与异常摘要 |
+| `POST /api/review/export` | dry-run 预览或正式生成 JSON+CSV；`include=approved|all` |
+
+新增专用错误码共 10 个：
+
+| 错误码 | HTTP | 含义 |
+| --- | --- | --- |
+| `REVIEW_SCAN_REQUIRED` | 409 | 尚未扫描，缓存为空 |
+| `REVIEW_PATH_INVALID` | 400 | 路径含逃逸、绝对路径、URL、UNC、盘符、ADS 或非法段 |
+| `REVIEW_PATH_NOT_SCANNED` | 404 | NFC 归一后仍不在当前清单 |
+| `REVIEW_FILE_MISSING` | 404 | 清单成员已从磁盘消失或不可读 |
+| `REVIEW_ITEM_NOT_DECIDED` | 404 | 撤销/重置目标没有在档结论 |
+| `CONTENT_CHANGED` | 409 | 所见 SHA 与服务端现算不同，拒绝审核写入 |
+| `FILE_TOO_LARGE` | 413 | 超过 max_file_bytes，拒绝读取完整正文 |
+| `REVIEW_BATCH_LIMIT` | 413 | 单批超过 500，整体拒收 |
+| `REVIEW_RECORD_INVALID` | 503 | 审核档案结构损坏，拒绝操作 |
+| `EXPORT_WRITE_FAILED` | 500 | 导出写盘失败，本次临时/半套文件已清理 |
+
 ## 只读与安全边界
 
 - 不修改或删除 `src/mtrp_hub/`、`config/`、`pyproject.toml`，不把它们作为面板输出目录。
@@ -103,12 +166,35 @@ T/R 分类互斥：同时具有 trial 和 rarely 的笔记只进入“双标签�
 
 - `run_panel.py`：固定回环地址的 Uvicorn 启动入口。
 - `panel/settings.py`：只读 YAML 配置、共享数据类与本地路径校验。
-- `panel/vault_check.py`：Obsidian 识别、链接安全扫描与 T/R 统计。
+- `panel/vault_check.py`：Obsidian 识别、链接安全扫描与单遍 `_scan_vault_once` 引擎。
+- `panel/review_scan.py`：同遍 statistics+items 双口径收集、wiki 反链、单篇安全读取与现算详情。
+- `panel/review_store.py`：零 IO 审核状态、历史、进度、全局分歧、目录覆盖率和导出项纯函数。
+- `panel/review_api.py`：注入单例的 10 个审核端点、单槽扫描缓存与成对原子导出。
+- `panel/api_common.py`：严格请求模型、用户 ID 模式和统一响应包裹。
 - `panel/github_check.py`：GitHub 在线无凭据实测。
 - `panel/git_local_check.py`：本地 Git 最小只读命令。
 - `panel/lexiang_check.py`：M 配置和证据边界。
 - `panel/audit_reader.py`：Decision Log 统一只读查询。
-- `panel/user_profiles.py`：本地用户档案校验、default 初始化和原子偏好更新。
-- `data/users.json`：运行时自管用户档案，由本目录 `.gitignore` 排除。
+- `panel/user_profiles.py`：本地用户档案校验、review 深度校验入口、default 初始化和唯一锁内原子写者。
+- `data/users.json`：运行时自管用户档案与审核台账，由本目录 `.gitignore` 排除。
+- `data/exports/`：运行时审核 JSON/CSV 导出，仅面板自管，永不入库；历史文件不自动删除。
 - `panel/main.py`：FastAPI 路由、统一包裹和异常兜底。
-- `static/index.html`：全中文、浅色、原生 JavaScript 单文件前端。
+- `static/index.html`：全中文、浅色、原生 JavaScript 单文件前端，含四库卡片与审核工作台两个 tab。
+
+## PRD 验收对照与测试
+
+1. **清单与分母自洽**：`tests/test_review_workbench.py::test_01...` 同时断言 review/scan 单响应恒等式及 check/vault 与 review/scan 的 statistics 逐键相等；fixture 固定为 6/5/1、MTR 1/1/2/1。真实 Vault 分母以实际扫描为准。
+2. **全流程 Vault 零写**：全流程用例前后执行全树 SHA-256 比对；所有审核写入只落 users.json，导出只落 data/exports。
+3. **多用户隔离与 owner 汇总**：双用户对同篇分别通过/拒绝，验证 records 互不影响、global.conflicts 含双方结论、非 owner global=null。
+4. **STALE 收敛**：篡改临时 Vault 副本后详情精确标 stale，decide 拒绝旧 SHA，默认导出剔除；`stale_reset` 保留历史并回到 pending。
+5. **JSON/CSV 可独立消费**：校验 schema_version、scope、vault_id、items 字段、默认 approved、include=all 的 stale 标注、CSV BOM/CRLF 与数据行一致。
+6. **异常篇全程可审**：INVALID_YAML 在队列、可筛、可按原文预览，单篇与批量动作不受限；同时覆盖路径逃逸、原子写失败不损档、批量部分失败和 NFC 记录键。
+
+回归命令：
+
+```bash
+./.venv/Scripts/python.exe -m pytest apps/connect-panel/tests -q
+./.venv/Scripts/python.exe -m pytest tests/ -q
+```
+
+当前基线为面板 **60 passed（v1 43 + review 17）**，主仓 **225 passed**。

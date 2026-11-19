@@ -26,6 +26,7 @@ AUDIT_WAL = Path(str(AUDIT_DB) + "-wal")
 AUDIT_SHM = Path(str(AUDIT_DB) + "-shm")
 USERS_JSON = PANEL_DIR / "data" / "users.json"
 USERS_DIR = USERS_JSON.parent
+EXPORTS_DIR = USERS_DIR / "exports"
 PORT_CANDIDATES = (9678, 9679, 9680, 9681)
 
 
@@ -223,10 +224,19 @@ def unwrap_error(payload: Any) -> dict[str, Any]:
     return error
 
 
+def export_artifacts() -> list[Path]:
+    """列出当前导出文件；测试只据此核对本套件新增产物。"""
+
+    if not EXPORTS_DIR.is_dir():
+        return []
+    return sorted(path for path in EXPORTS_DIR.glob("*") if path.is_file())
+
+
 __all__ = [
     "AUDIT_DB",
     "AUDIT_SHM",
     "AUDIT_WAL",
+    "EXPORTS_DIR",
     "FIXTURE_VAULT",
     "PANEL_DIR",
     "PANEL_VENV_PYTHON",
@@ -236,6 +246,7 @@ __all__ = [
     "PanelServer",
     "aggregation_digest",
     "aggregation_paths",
+    "export_artifacts",
     "file_sha256",
     "pick_free_port",
     "tree_hashes",

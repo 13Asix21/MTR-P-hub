@@ -13,13 +13,20 @@ from typing import Any
 from fastapi import Body, FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .api_common import (
+    USER_ID_PATTERN as _USER_ID_PATTERN,
+    StrictRequest,
+    error as _error,
+    ok as _ok,
+)
 from .audit_reader import AuditReader
 from .git_local_check import check_git_local
 from .github_check import check_github
 from .lexiang_check import check_lexiang
+from .review_api import create_review_router
 from .user_profiles import (
     GithubRepoPreference,
     ProfileStore,
@@ -34,7 +41,6 @@ from .vault_check import check_vault
 logger = logging.getLogger("connect-panel")
 _STATIC_INDEX = Path(__file__).resolve().parent.parent / "static" / "index.html"
 _PROFILE_STORE_PATH = Path(__file__).resolve().parent.parent / "data" / "users.json"
-_USER_ID_PATTERN = r"^[a-z0-9-]{1,32}$"
 
 
 @asynccontextmanager
@@ -53,12 +59,6 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
-
-
-class StrictRequest(BaseModel):
-    """所有请求默认拒绝未声明字段。"""
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
 
 
 class VaultCheckRequest(StrictRequest):
@@ -141,14 +141,6 @@ def _ready_profile_store() -> ProfileStore:
 
 def _get_profile(user_id: str) -> UserProfile:
     return _ready_profile_store().get_user(user_id)
-
-
-def _ok(data: Any) -> dict[str, Any]:
-    return {"status": "ok", "data": data}
-
-
-def _error(code: str, message: str) -> dict[str, Any]:
-    return {"status": "error", "error": {"code": code, "message": message}}
 
 
 @app.middleware("http")
@@ -368,6 +360,9 @@ def recent_audit(limit: int = Query(default=10, ge=1, le=100)) -> dict[str, Any]
     settings = get_settings()
     events = AuditReader(settings.audit_path).recent_events(limit)
     return _ok({"events": events, "count": len(events), "limit": limit, "read_only": True})
+
+
+app.include_router(create_review_router(get_settings, get_profile_store))
 
 
 __all__ = ["app", "get_settings"]
