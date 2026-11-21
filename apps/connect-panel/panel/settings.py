@@ -179,7 +179,13 @@ def load_settings(config_dir: str | Path | None = None) -> PanelSettings:
 
     module_path = Path(__file__).resolve()
     repository_root = module_path.parents[3]
-    selected_config = config_dir or os.environ.get("MTRP_PANEL_CONFIG_DIR") or repository_root / "config"
+    if config_dir is not None or os.environ.get("MTRP_PANEL_CONFIG_DIR"):
+        selected_config = config_dir or os.environ["MTRP_PANEL_CONFIG_DIR"]
+    else:
+        # 延迟导入避免与 runtime 的 PanelError 类型依赖形成循环。
+        from .runtime import resolve_config_dir, resolve_runtime_paths
+
+        selected_config = resolve_config_dir(resolve_runtime_paths())
     selected_dir = Path(selected_config).expanduser().absolute()
 
     stage2 = _read_yaml(selected_dir / "stage2.yaml")

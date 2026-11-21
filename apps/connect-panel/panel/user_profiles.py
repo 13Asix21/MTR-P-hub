@@ -127,7 +127,9 @@ class ProfileStore:
         expected = {"vault_root", "git_local_path", "github_repos", "auto_refresh_minutes"}
         if set(raw) != expected:
             raise PanelError("PREFERENCES_INVALID", "preferences 字段不完整或包含未知字段。")
-        vault_root = str(normalize_local_absolute_path(raw.get("vault_root")))
+        vault_root = raw.get("vault_root")
+        # 安全模板不预设用户目录；空字符串只表示等待首次设置，PATCH 仍走完整路径校验。
+        vault_path = "" if vault_root == "" else str(normalize_local_absolute_path(vault_root))
         git_local_path = str(normalize_local_absolute_path(raw.get("git_local_path")))
         raw_repositories = raw.get("github_repos")
         if not isinstance(raw_repositories, list) or len(raw_repositories) > 32:
@@ -141,7 +143,7 @@ class ProfileStore:
         ):
             raise PanelError("AUTO_REFRESH_INVALID", "auto_refresh_minutes 可空，或为 0（关闭）及 5–60 分钟。")
         return UserPreferences(
-            vault_root=vault_root,
+            vault_root=vault_path,
             git_local_path=git_local_path,
             github_repos=repositories,
             auto_refresh_minutes=auto_refresh,
@@ -226,6 +228,44 @@ class ProfileStore:
                     temporary_name = None
             raise PanelError("PROFILE_WRITE_FAILED", "用户档案写入失败。", 500) from exc
 
+    def _write_new_unlocked(self, raw: dict[str, Any]) -> bool:
+        """原子创建首份档案；返回是否由本次调用发布，不覆盖竞争者。"""
+
+        temporary_name: str | None = None
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", newline="\n", prefix=".users-", suffix=".tmp",
+                dir=self._path.parent, delete=False,
+            ) as stream:
+                temporary_name = stream.name
+                json.dump(raw, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.link(temporary_name, self._path)
+            return True
+        except FileExistsError:
+            return False
+        except OSError as exc:
+            raise PanelError("PROFILE_WRITE_FAILED", "用户档案写入失败。", 500) from exc
+        finally:
+            if temporary_name:
+                try:
+                    Path(temporary_name).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    def ephemeral_default(self, preferences: UserPreferences) -> UserProfile:
+        """返回只用于未提交数据根的内存快照，不创建、不读取目标文件。"""
+
+        return UserProfile(
+            user_id="default",
+            display_name="本机默认用户",
+            role="owner",
+            preferences=self._parse_preferences(preferences_to_dict(preferences)),
+        )
+
     def ensure_default(self, preferences: UserPreferences) -> UserProfile:
         """文件不存在或缺 default 时补建，不覆盖已有 default 偏好。"""
 
@@ -246,6 +286,14 @@ class ProfileStore:
                 raw["users"] = [self._user_to_store_dict(item) for item in users]
             else:
                 raw = {"schema_version": "1", "users": [self._user_to_store_dict(default)]}
+                if self._write_new_unlocked(raw):
+                    return default
+                # 迁移/其他实例已原子发布时采用其内容，不覆盖，也不伪造新档已保存。
+                _raw, users = self._read_unlocked()
+                existing = next((user for user in users if user.user_id == "default"), None)
+                if existing is not None:
+                    return existing
+                raise PanelError("PROFILE_DEFAULT_MISSING", "并发创建的档案缺少 default 用户。", 503)
             self._write_unlocked(raw)
             return default
 

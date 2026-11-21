@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">MTR-P 审核工作台</title>
+  <desc id="description">绿色笔记本与审核勾号，表示本地只读笔记审核。</desc>
+  <rect width="512" height="512" rx="88" fill="#175d52"/>
+  <path d="M122 92h210c31 0 56 25 56 56v272H178c-31 0-56-25-56-56V92Z" fill="#f4f5f0"/>
+  <path d="M122 364c0-25 20-44 44-44h222v100H178c-31 0-56-25-56-56Z" fill="#dce7df"/>
+  <path d="M178 168h152M178 218h114" stroke="#175d52" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="344" cy="344" r="94" fill="#c86d3b" stroke="#f4f5f0" stroke-width="12"/>
+  <path d="m298 344 32 32 62-70" fill="none" stroke="#fff" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

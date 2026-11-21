@@ -1,0 +1,14 @@
+{
+  "name": "mtrp-connect-panel-online",
+  "private": true,
+  "version": "0.1.0",
+  "description": "零构建的在线审核工作台；当前仅包含 T01/T02 引擎与 fixture 对拍。",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test parity/tests/*.test.mjs",
+    "parity": "node parity/run_parity.mjs"
+  }
+}

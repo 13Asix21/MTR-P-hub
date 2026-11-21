@@ -1,0 +1,49 @@
+{
+  "schema_version": "1",
+  "source": "tests/fixtures/stage2/vault",
+  "access": "read-only reference; files are not copied or modified",
+  "files": [
+    {
+      "path": "2-Permanent/Resources/MTR-P-System/excluded.md",
+      "sha256": "8832285ec1f0a8ffcb19ba8ce989f2d6ab62828e8804930b23224613dfafd33d",
+      "size_bytes": 66,
+      "managed": false
+    },
+    {
+      "path": "2-Permanent/code-fences.md",
+      "sha256": "5022c27d69dc2af592248edf134356abc6416b856cc24813a214b7c7b40f7b6f",
+      "size_bytes": 132,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid-yaml.md",
+      "sha256": "3a887f6dcd22555a43089f87d5f2fdc413454003790c3263c04ef8400a2373bd",
+      "size_bytes": 90,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/tag-conflict.md",
+      "sha256": "2355742fed113166bf10654951663aca44e77ebebf7fcbbfbf4f6ebcf7503c77",
+      "size_bytes": 80,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unmanaged.md",
+      "sha256": "c1d0698ee01ba63c4f323a2ecdf44bd83d0c5eaa4ee0766e9d16af47f1abe9fb",
+      "size_bytes": 72,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/中文目录/rarely.md",
+      "sha256": "bb4a92d2eca576b468e5f29a2f29362e5041920b9964a4a1acfdab716ce53d4c",
+      "size_bytes": 87,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/中文目录/trial-inline.md",
+      "sha256": "3183c09408e121855b122570074780da424bb1e9db6f349d63edd42e2f506eb2",
+      "size_bytes": 106,
+      "managed": true
+    }
+  ]
+}

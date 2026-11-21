@@ -1,0 +1,3 @@
+# 对拍报告由 runner 生成，保留生成器、确定性夹具与 .gitkeep，避免本机绝对路径入库。
+parity/reports/*
+!parity/reports/.gitkeep

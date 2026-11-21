@@ -321,10 +321,21 @@ def test_07_export_approved_all_and_csv(server, tmp_path: Path) -> None:
         "POST", "/api/review/export", payload={"user_id": user_id, "include": "approved"}
     )
     exported = unwrap_ok(payload)
+    # 默认源码开发模式保留旧相对字段，同时给出实际运行时绝对路径，不新增文件下载端点。
+    assert exported["export_location"] == "当前数据目录/exports"
+    assert set(exported["files"]) == set(exported["files_absolute"]) == {"json", "csv"}
     json_path = PANEL_DIR / exported["files"]["json"]
     csv_path = PANEL_DIR / exported["files"]["csv"]
-    assert json_path.parent == EXPORTS_DIR
-    assert csv_path.parent == EXPORTS_DIR
+    for extension, path in (("json", json_path), ("csv", csv_path)):
+        assert exported["files"][extension] == f"data/exports/{path.name}"
+        assert Path(exported["files_absolute"][extension]) == path.resolve()
+        assert path.resolve().parent == EXPORTS_DIR.resolve()
+        assert path.is_file()
+    status, rejected = server.request_json(
+        "GET", "/api/review/export/" + urllib.parse.quote(exported["files_absolute"]["json"], safe="")
+    )
+    assert status == 404 and rejected["error"]["code"] == "ROUTE_NOT_FOUND"
+    assert "users.json" not in json.dumps(rejected, ensure_ascii=False)
     document = json.loads(json_path.read_text(encoding="utf-8"))
     assert document["schema_version"] == "1"
     assert set(document) >= {"schema_version", "exported_at", "user_id", "vault_id", "scope", "counts", "items"}

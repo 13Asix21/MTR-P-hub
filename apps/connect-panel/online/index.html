@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#175d52">
+  <meta name="description" content="MTR-P 审核工作台在线版：只读 Vault、当前浏览器离线审核与 JSON/CSV 下载。">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <title>审核工作台（在线版）</title>
+  <link rel="stylesheet" href="./css/styles.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">M</span><span>MTR-P</span></div>
+    <span class="online-badge">在线版</span>
+    <span class="sync-state">云台账未连接</span>
+  </header>
+  <div id="app">
+    <main class="stage-shell"><h1>审核工作台</h1><p>正在检查浏览器目录读取能力。</p></main>
+  </div>
+  <footer>Vault 只读 · 正文不出浏览器 · 审核记录与导出清单另行存储</footer>
+  <noscript><p class="noscript">需要启用 JavaScript 才能使用在线审核工作台；当前页面不会请求目录权限。</p></noscript>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

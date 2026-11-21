@@ -1,0 +1,39 @@
+{
+  "schema_version": "1",
+  "description": "固定 now 与 sha 的审核域脚本；两端逐操作、逐错误执行，无运行时随机值。",
+  "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "other_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "listing": {
+    "total": 3,
+    "items": [
+      {"vault_relative_path": "2-Permanent/a.md", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "parse_status": "ok", "mtr_state": "unmanaged", "tags": ["note"], "size_bytes": 10, "mtime": "2026-01-01T00:00:00+00:00"},
+      {"vault_relative_path": "2-Permanent/b.md", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "parse_status": "INVALID_YAML", "mtr_state": "unknown", "tags": [], "size_bytes": 20, "mtime": "2026-01-01T00:00:00+00:00"},
+      {"vault_relative_path": "2-Permanent/dir/c.md", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "parse_status": "ok", "mtr_state": "trial", "tags": ["mtr/trial"], "size_bytes": 30, "mtime": "2026-01-01T00:00:00+00:00"}
+    ]
+  },
+  "steps": [
+    {"op": "decide", "path": "2-Permanent/a.md", "action": "approved", "reason": "first", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "at": "2026-01-01T00:00:00+00:00"},
+    {"op": "decide", "path": "2-Permanent/b.md", "action": "approved", "reason": null, "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "at": "2026-01-01T00:00:01+00:00"},
+    {"op": "decide", "path": "2-Permanent/a.md", "action": "rejected", "reason": "changed decision", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "at": "2026-01-01T00:00:02+00:00"},
+    {"op": "decide", "path": "2-Permanent/dir/c.md", "action": "skipped", "reason": "later", "sha": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "at": "2026-01-01T00:00:03+00:00"},
+    {"op": "capture", "name": "decided"},
+    {"op": "progress", "name": "progress_decided"},
+    {"op": "coverage", "name": "coverage_decided"},
+    {"op": "global", "name": "global_decided"},
+    {"op": "export", "name": "export_approved", "include": "approved", "fresh": {"2-Permanent/a.md": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "2-Permanent/b.md": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}},
+    {"op": "export", "name": "export_all", "include": "all", "fresh": {"2-Permanent/a.md": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "2-Permanent/b.md": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "2-Permanent/dir/c.md": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}},
+    {"op": "status", "name": "stale", "path": "2-Permanent/a.md", "current_sha": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"},
+    {"op": "reset", "path": "2-Permanent/a.md", "mode": "stale_reset", "at": "2026-01-01T00:00:04+00:00"},
+    {"op": "capture", "name": "after_stale_reset"},
+    {"op": "decide", "path": "2-Permanent/a.md", "action": "approved", "reason": "review again", "sha": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "at": "2026-01-01T00:00:05+00:00"},
+    {"op": "reset", "path": "2-Permanent/a.md", "mode": "undo", "at": "2026-01-01T00:00:06+00:00"},
+    {"op": "capture", "name": "after_undo"},
+    {"op": "progress", "name": "progress_after_undo"},
+    {"op": "reset_error", "path": "2-Permanent/a.md", "mode": "undo", "at": "2026-01-01T00:00:07+00:00"},
+    {"op": "decide_error", "path": "../escape.md", "action": "approved", "reason": "", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "at": "2026-01-01T00:00:08+00:00"},
+    {"op": "decide_error", "path": "2-Permanent/a.md", "action": "banana", "reason": "", "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "at": "2026-01-01T00:00:08+00:00"},
+    {"op": "decide_error", "path": "2-Permanent/a.md", "action": "approved", "reason": "too long", "sha": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "at": "2026-01-01T00:00:08+00:00"},
+    {"op": "history_limit"},
+    {"op": "invalid_states"}
+  ]
+}

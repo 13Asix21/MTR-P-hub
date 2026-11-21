@@ -1,0 +1,1 @@
+full width and spaces

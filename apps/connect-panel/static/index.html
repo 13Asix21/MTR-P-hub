@@ -96,6 +96,10 @@
     .profile-note { grid-column: 1 / -1; margin: -3px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
     .global-message { min-height: 20px; margin-top: 12px; color: var(--muted); font-size: 12px; }
     .global-message.error { color: var(--red); }
+    .setup-notice { margin-top: 12px; padding: 12px 14px; border: 1px solid #d7e3f0; border-radius: 9px; background: var(--blue-soft); color: #344054; font-size: 13px; line-height: 1.7; }
+    .setup-notice p { margin: 0 0 8px; }
+    .setup-notice p:last-child { margin-bottom: 0; }
+    .setup-notice .button { margin-right: 8px; }
     .config-strip {
       display: flex;
       flex-wrap: wrap;
@@ -344,7 +348,7 @@
           <span class="local-badge">仅监听 127.0.0.1 · 默认无自动轮询</span>
         </div>
       </div>
-      <p class="honesty">M/在线为 WorkBuddy 会话级连接器证据；T/R/本地为实文件只读校验；P在线为本机直连 GitHub API 实测。面板不调用 MCP、不使用凭据、不写入 Vault、审计库、Git 工作区或主仓配置；仅用户偏好写入面板自管 data/users.json。</p>
+      <p class="honesty">M/在线为 WorkBuddy 会话级连接器证据；T/R/本地为实文件只读校验；P在线为本机直连 GitHub API 实测。面板不调用 MCP、不使用凭据、不写入 Vault、审计库、Git 工作区或主仓配置；仅用户偏好写入所选本机数据目录的 users.json。</p>
       <section class="profile-panel" aria-label="本地用户档案">
         <div>
           <label for="user-select">当前用户</label>
@@ -361,6 +365,7 @@
         <p class="profile-note">多用户为档案层预留：本地单机无登录认证，接入 WorkBuddy 云服务用户体系后启用角色权限。路径、关注仓库和刷新开关按档案隔离；config 与 Decision Log 始终是机器级共享事实。</p>
       </section>
       <div class="global-message" id="global-message" role="status" aria-live="polite">正在读取默认配置……</div>
+      <section class="setup-notice" id="setup-notice" aria-label="首次设置" hidden></section>
     </header>
 
     <nav class="main-tabs" aria-label="面板视图">
@@ -721,6 +726,72 @@
       element.className = isError ? "global-message error" : "global-message";
     }
 
+    function setupButton(label, handler, primary = false) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = primary ? "button button-primary" : "button";
+      button.textContent = label;
+      button.addEventListener("click", handler);
+      return button;
+    }
+
+    function renderSetupNotice(health, vaultPath) {
+      const notice = byId("setup-notice");
+      notice.replaceChildren();
+      if (health.migration_required) {
+        const message = document.createElement("p");
+        message.textContent = "检测到旧版本地档案。当前独立目录尚未使用旧数据；只有确认后才复制，原档案保持不变，也不会覆盖新档案。";
+        notice.appendChild(message);
+        notice.appendChild(setupButton("确认复制旧版档案", async () => {
+          const button = notice.querySelector("button");
+          if (button) button.disabled = true;
+          try {
+            const result = await callApi("/api/runtime/migrate", "POST", { confirm: true });
+            setGlobalMessage(result.message);
+            await loadUsers("default");
+            await loadOverview();
+          } catch (error) {
+            setGlobalMessage((error.code || "MIGRATION_FAILED") + "：" + (error.message || "迁移失败，原档案未改变。"), true);
+            if (button) button.disabled = false;
+          }
+        }, true));
+        notice.appendChild(setupButton("暂不迁移，使用独立目录", async event => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          try {
+            const result = await callApi("/api/runtime/migrate", "POST", { confirm: false, use_independent: true });
+            setGlobalMessage(result.message + "；此后不能再用迁移覆盖新档。");
+            await loadUsers("default");
+            await loadOverview();
+            byId("vault-path").focus();
+          } catch (error) {
+            setGlobalMessage((error.code || "INITIALIZATION_FAILED") + "：" + (error.message || "独立档案建立失败，迁移仍待确认。"), true);
+            button.disabled = false;
+          }
+        }));
+        notice.hidden = false;
+        return;
+      }
+      if (!vaultPath) {
+        const message = document.createElement("p");
+        message.textContent = "首次使用：请在 T 库输入本地 Vault 绝对路径，点击“保存为该用户偏好”，再手动扫描。未配置前不会扫描或修改任何笔记。";
+        notice.appendChild(message);
+        notice.appendChild(setupButton("填写 Vault 路径", () => byId("vault-path").focus(), true));
+        notice.hidden = false;
+      } else {
+        notice.hidden = true;
+      }
+    }
+
+    async function refreshRuntimeNotice() {
+      try {
+        const health = await callApi("/api/health");
+        renderSetupNotice(health, byId("vault-path").value.trim());
+      } catch (error) {
+        setGlobalMessage((error.code || "HEALTH_FAILED") + "：" + (error.message || "运行状态读取失败。"), true);
+      }
+    }
+
     function touchUpdated() {
       byId("last-updated").textContent = new Date().toLocaleString("zh-CN", { hour12: false });
     }
@@ -853,7 +924,8 @@
       setBusy(buttonId, true, "保存中……");
       try {
         await patchPreferences({ vault_root: path });
-        setGlobalMessage("Vault 路径已保存为用户 " + currentUserId + " 的偏好；其他用户档案不受影响。");
+        setGlobalMessage("Vault 路径已保存为用户 " + currentUserId + " 的偏好；其他用户档案不受影响。现在可手动扫描。");
+        byId("setup-notice").hidden = true;
       } catch (error) {
         setGlobalMessage((error.code || "PREFERENCE_SAVE_FAILED") + "：" + (error.message || "偏好保存失败。"), true);
       } finally {
@@ -910,6 +982,7 @@
         renderRows("fields-P-local", [["默认工作区", stores.P.local.path, "path-value"], ["当前状态", "等待手动只读校验"]]);
         configureGithubAuto(data.current_user.preferences.auto_refresh_minutes, false);
         setGlobalMessage("已加载 " + data.current_user.display_name + " 的档案默认值；检测由手动触发，临时输入不会自动保存。");
+        await refreshRuntimeNotice();
       } catch (error) {
         setGlobalMessage((error.code || "OVERVIEW_FAILED") + "：" + (error.message || "默认配置加载失败。"), true);
       }
@@ -1821,7 +1894,7 @@
         const scope = include === "approved" ? "仅当前内容一致的通过篇" : "全部已决篇（stale 仅标注，不剔除）";
         openReviewModal(
           "确认导出审核清单",
-          "范围：" + scope + "\n将导出 " + preview.items_count + " 篇；默认通过集合已排除 " + preview.excluded_stale + " 篇内容已变更。\n将同时生成 UTF-8 JSON 与带 BOM 的 CSV，写入面板 data/exports/，不会写入 Vault。",
+          "范围：" + scope + "\n将导出 " + preview.items_count + " 篇；默认通过集合已排除 " + preview.excluded_stale + " 篇内容已变更。\n将同时生成 UTF-8 JSON 与带 BOM 的 CSV，写入当前数据目录/exports，不会写入 Vault。",
           async () => {
             const result = await callApi("/api/review/export", "POST", {
               user_id: currentUserId,
@@ -1830,10 +1903,11 @@
             });
             showReviewResultModal(
               "导出完成",
-              "已导出 " + result.counts.exported_items + " 篇；剔除内容已变更 " + result.counts.excluded_stale + " 篇。文件位于 apps/connect-panel/ 下。",
-              result.files
+              "已导出 " + result.counts.exported_items + " 篇；剔除内容已变更 " + result.counts.excluded_stale + " 篇。文件位于当前数据目录/exports；以下为实际本机路径。",
+              result.files_absolute || result.files
             );
-            setReviewMessage("导出完成：" + result.files.json + " 与 " + result.files.csv);
+            const exportedPaths = result.files_absolute || result.files;
+            setReviewMessage("导出完成，当前数据目录/exports：" + exportedPaths.json + " 与 " + exportedPaths.csv);
           },
           "确认生成 JSON + CSV"
         );

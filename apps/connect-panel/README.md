@@ -2,6 +2,15 @@
 
 这是位于 `apps/connect-panel/` 的独立本地面板，用来加载主仓配置，对 M / T / R / P 四库做能力边界明确的连接校验，并提供 Vault 进入 M 库前的人工审核工作台。后端使用 FastAPI，前端是零 CDN、零 npm、零构建步骤的单文件 HTML。审核工作台只产生审核台账与放行清单，不执行发布。
 
+## 双形态交付契约（当前实测）
+
+| 形态 | 当前交付 | 台账与边界 | 已验收证据 |
+| --- | --- | --- | --- |
+| 本地完整版 | FastAPI 本地面板，及 `packaging/dist-v1/MTRP-ReviewWorkbench/` Windows 便携目录 | 本机回环服务，无登录认证；台账在明确的数据目录。保留 M/T/R/P 面板与审核导出，不改写 Vault | 独立 QA 最新 **64 / 136 / 225 项**通过、NoOne；主线程真实便携 EXE 扫描—审核—导出 smoke 通过 |
+| 浏览器静态版 | `online/` 零构建静态审核工作台，可回环启动或另行部署 HTTPS | **本地浏览器档案，不是账号登录；无 Auth、云台账或跨设备同步**；正文不上传，Vault 只读 | 主线程真实 Chrome **11/11 组**完整断言、Node **66 项**、50 篇双引擎对拍差异 **0** |
+
+两者代码、存储和运行入口独立，不自动合并进度。`docs/prd-online-workbench.md` 是原完整在线版目标；其中云账号/云同步、真实 Vault 全量对拍、真实系统目录选择器和公开 HTTPS 安装**尚非本轮已交付事实**，以本节和 `online/README.md` 的实际边界为准。公开部署须另行明确授权，本轮未发布公网链接。便携目录不是安装器，真实升级保留、安装卸载和跨机器仍待验。
+
 ## 启动
 
 必须从主仓根目录使用项目已有的 Python 3.11 虚拟环境：
@@ -11,17 +20,66 @@
 ./.venv/Scripts/python.exe apps/connect-panel/run_panel.py
 ```
 
-浏览器打开 `http://127.0.0.1:8765/`。可用 `--port` 改端口，例如：
+默认自动打开 `http://127.0.0.1:8765/`，监听地址固定为 `127.0.0.1`，没有 `0.0.0.0` 覆盖项。默认源码开发模式继续读取主仓 `config/` 和面板 `data/users.json`，原档案不会自动搬迁。常用启动参数：
 
 ```bash
-./.venv/Scripts/python.exe apps/connect-panel/run_panel.py --port 8766
+# 改固定端口，不自动打开浏览器
+./.venv/Scripts/python.exe apps/connect-panel/run_panel.py --port 8766 --no-browser
+
+# 使用独立数据目录；0 由操作系统分配空闲端口，控制台输出实际 URL
+./.venv/Scripts/python.exe apps/connect-panel/run_panel.py --data-dir "E:/MTRP-local-data" --port 0 --no-browser
 ```
 
-监听地址固定为 `127.0.0.1`，没有 `0.0.0.0` 覆盖项。默认配置目录为主仓 `config/`；仅为独立调试可用环境变量 `MTRP_PANEL_CONFIG_DIR` 指向另一份配置副本。面板依赖仅写在本目录 `requirements.txt`，不进入主仓 `pyproject.toml`。
+`--data-dir` 必须是本机绝对路径，台账和导出分别写入该目录的 `users.json` 与 `exports/`。显式新目录优先读取其 `config/`；没有完整配置时使用随面板提供的 `panel/default_config/` 安全模板，不回读主仓的私人路径。无旧档时首次启动建立空档案，页面提示填写并保存 Vault 绝对路径，不自动扫描。
+
+发现旧版 `apps/connect-panel/data/users.json` 时，页面提供“确认复制旧版档案”。只有显式确认后才读取、完整校验并复制到新目录，旧文件保持原字节，已有新档案绝不覆盖；迁移待决时启动、`health/users/overview` 和审核读取不创建目标，`users` 返回空列表，`overview` 只返回内存默认快照。选择“暂不迁移”、开始新增用户/保存偏好/提交审核会明确建立独立新档，此后不可再迁移覆盖。该防护是本机回环安全边界，不是登录认证。
+
+迁移临时文件与目标位于同一文件系统，使用 `os.link(temp, target)` 原子发布；目标已存在返回 409，硬链接不支持或权限失败返回写入失败，均不覆盖或按大小删除目标，也不伪报迁移成功。清理只针对自有临时路径。当前测试覆盖确定性竞争和多线程一方成功一方 409，不宣称已覆盖多进程压力、目录 fsync、掉电恢复或所有目标平台。
+
+也可用环境变量 `MTRP_PANEL_DATA_DIR` 指定数据根，`MTRP_PANEL_CONFIG_DIR` 显式指定另一份配置副本，`MTRP_PANEL_LEGACY_PROFILE` 为安装器/测试指定绝对旧档路径（默认仍为原开发档案位置）；优先级为启动参数/环境数据根 > 数据根 `config/` > 默认源码开发主仓配置（仅未显式隔离时）> 安全模板。面板依赖仅写在本目录 `requirements.txt`，不进入主仓 `pyproject.toml`。
+
+`GET /api/health` 可检查 `ready/local_only` 与迁移状态，不返回本机数据绝对路径；`POST /api/runtime/migrate` 用 `{"confirm":true}` 显式复制旧档，用 `{"use_independent":true}` 明确建立独立新档，两者都不会删除旧档。
+
+## Windows 便携目录交付
+
+`packaging/dist-v1/MTRP-ReviewWorkbench/` 是包含 EXE、`_internal/` 运行时与静态资源的 **Windows x64 便携目录**，不是单个可独立运行的 EXE，也不是安装器。交付时保留整个 `MTRP-ReviewWorkbench/` 目录及内部相对结构，然后运行其中的 `MTRP-ReviewWorkbench.exe`。不要只复制 EXE 或移动 `_internal/`。当前产物未签名，没有安装向导、卸载程序、自动更新或跨机器兼容性验收。
+
+- 直接启动默认监听 `127.0.0.1:8765` 并打开本机浏览器；也支持前述 `--port`、`--no-browser` 参数。例如：
+
+  ```powershell
+  .\MTRP-ReviewWorkbench.exe --port 8766 --no-browser
+  ```
+
+- 未传 `--data-dir` 或 `MTRP_PANEL_DATA_DIR` 时，便携版台账和导出位于 Windows 每用户目录 `%LOCALAPPDATA%\MTRP-ReviewWorkbench\`，不是开发仓 `data/`。可把已有 `config/` 配置副本放在该数据根；未提供时使用随包安全模板。
+- 建议显式指定一个可写的绝对数据目录，便于备份和明确升级边界：
+
+  ```powershell
+  .\MTRP-ReviewWorkbench.exe --data-dir "E:\MTRP-local-data" --port 8766 --no-browser
+  ```
+
+  其 `users.json` 保存用户与审核台账，`exports/` 保存正式 JSON/CSV 导出；仍需在页面填写并保存待扫描的 Vault 绝对路径，再显式点击扫描。应备份整个数据目录，审核不会改写 Vault 原文。
+- 便携版启动器将旧版档案候选设为程序目录下的 `data/users.json`。检测到有效旧档时，只有页面明确“确认复制旧版档案”才复制到当前数据目录；不会覆盖已有目标或删除源文件。“暂不迁移”或开始新的本地写入会建立独立档案。程序目录、数据目录和 Vault 是三套不同位置，不应混用。
+- 升级时退出旧程序，另建目录完整解压新版，再使用同一个数据目录启动；不要用旧版覆盖正在运行的目录。**目前只通过独立数据根、合成 Vault、中文/空格路径的 EXE 扫描—审核—导出 smoke；从旧便携目录升级后保留真实台账与配置尚未实测。** 升级前务必备份数据目录，实际交付候选仍需验收升级保留、安装/卸载边界和目标机器环境。
+
+### 从源码构建与验收
+
+构建使用 `packaging/` 下已有的独立 Python 3.11 环境，不污染主仓 `.venv`；首次准备该环境时需安装 `requirements.txt`、PyInstaller 以及可导入的主仓 `src/` 包。构建前先完成本文件所列面板和主仓回归，再从仓库根执行：
+
+```bash
+apps/connect-panel/packaging/.venv/Scripts/python.exe -m PyInstaller apps/connect-panel/packaging/mtrp_review_workbench.spec --distpath apps/connect-panel/packaging/dist-v1 --workpath apps/connect-panel/packaging/build-v1 --clean
+```
+
+对已有输出目录不要通过绕过宿主保护的方式批量删除；应使用新的构建目录，确认候选通过后再保留旧目录并替换交付副本。`Build complete!` 只表示打包完成，不是 EXE 验收。必须对最终目录中的真实二进制运行：
+
+```bash
+./.venv/Scripts/python.exe apps/connect-panel/packaging/smoke_test.py apps/connect-panel/packaging/dist-v1/MTRP-ReviewWorkbench/MTRP-ReviewWorkbench.exe
+```
+
+该 smoke 只创建临时合成 Vault 和独立数据根，验证回环 health、扫描、当前 SHA 审核、导出文件及 Vault SHA 不变，最后关闭 EXE。它不读取真实个人 Vault，也不替代上述升级保留、签名、跨机器或安装器验收。
 
 ## 多用户档案层预留
 
-首次启动或档案缺少 default 时会自动初始化/补建 `apps/connect-panel/data/users.json`；本目录 `.gitignore` 排除整个 `data/`，不会修改仓库根 `.gitignore`。`users.json` 只有注入的 `ProfileStore` 单例持锁写入，采用 UTF-8、临时文件、`fsync` 和原子替换；另一处允许写入的位置是审核导出自管目录 `data/exports/`。default 用户初始内容示例（实际路径会经 `pathlib` 归一化）：
+无迁移待决的首次启动或档案缺少 default 时会自动初始化/补建当前数据目录的 `users.json`（默认源码模式为 `apps/connect-panel/data/users.json`）；本目录 `.gitignore` 排除整个 `data/`，不会修改仓库根 `.gitignore`。`users.json` 只有注入的 `ProfileStore` 单例持锁写入，采用 UTF-8、临时文件、`fsync` 和原子替换；另一处允许写入的位置是同一数据根下的 `exports/`。安全模板首次创建的 Vault 偏好为空字符串，表示待设置；保存偏好或执行扫描仍要求本机绝对路径。default 用户初始内容示例（实际路径会经 `pathlib` 归一化）：
 
 ```json
 {
@@ -32,8 +90,8 @@
       "display_name": "本机默认用户",
       "role": "owner",
       "preferences": {
-        "vault_root": "C:/Users/Administrator/Nutstore/1/我的坚果云/Obsidian Vault",
-        "git_local_path": "E:/ASoftwareManage/Agithub/MTR-P-hub",
+        "vault_root": "C:/Users/example/Obsidian Vault",
+        "git_local_path": "C:/Users/example/MTR-P-hub",
         "github_repos": [{"owner": "13Asix21", "repo": "MTR-P"}],
         "auto_refresh_minutes": 0
       },
@@ -89,7 +147,7 @@ T/R 分类互斥：同时具有 trial 和 rarely 的笔记只进入“双标签�
 
 默认 `include=approved` 只导出动作仍为 approved 且导出时现算 SHA 与记录一致的篇目；stale 被剔除并计入 `excluded_stale`。`include=all` 导出全部已决篇并给每项增加 `stale: true|false`，不剔除。`dry_run=true` 只预览，不创建文件。
 
-正式导出在 `apps/connect-panel/data/exports/` 生成同 stem 的 JSON 与 CSV：`review-<user_id>-<YYYYMMDD-HHMMSS>(-n?).json|csv`，同秒重名自动追加序号。JSON 顶层含 `schema_version / exported_at / user_id / vault_id / scope / counts / items`；`vault_id` 是 resolved Vault 绝对路径 SHA-256 的前 16 位。CSV 使用 UTF-8 BOM、CRLF 和 RFC4180 引号规则，tags 以分号连接，数据行数与 JSON items 严格一致（另有表头）。写盘使用双临时文件、`fsync` 和替换，失败清理本次半套产物。**不会自动删除历史导出**；需要控制份数时由人工清理，整个 `data/` 均不入库。
+正式导出在当前数据目录的 `exports/`（默认源码模式为 `apps/connect-panel/data/exports/`）生成同 stem 的 JSON 与 CSV：`review-<user_id>-<YYYYMMDD-HHMMSS>(-n?).json|csv`，同秒重名自动追加序号。JSON 顶层含 `schema_version / exported_at / user_id / vault_id / scope / counts / items`；`vault_id` 是 resolved Vault 绝对路径 SHA-256 的前 16 位。CSV 使用 UTF-8 BOM、CRLF 和 RFC4180 引号规则，tags 以分号连接，数据行数与 JSON items 严格一致（另有表头）。写盘使用双临时文件、`fsync` 和替换，失败清理本次半套产物。**不会自动删除历史导出**；需要控制份数时由人工清理，整个 `data/` 均不入库。
 
 ## API
 
@@ -164,7 +222,9 @@ T/R 分类互斥：同时具有 trial 和 rarely 的笔记只进入“双标签�
 
 ## 文件职责
 
-- `run_panel.py`：固定回环地址的 Uvicorn 启动入口。
+- `run_panel.py`：固定回环地址、独立数据目录、动态端口与就绪后浏览器启动入口。
+- `panel/runtime.py`：数据目录与配置优先级、显式旧档案迁移、Host/Origin/写请求安全校验。
+- `panel/default_config/`：不含本机私人路径的四份安全 YAML 模板。
 - `panel/settings.py`：只读 YAML 配置、共享数据类与本地路径校验。
 - `panel/vault_check.py`：Obsidian 识别、链接安全扫描与单遍 `_scan_vault_once` 引擎。
 - `panel/review_scan.py`：同遍 statistics+items 双口径收集、wiki 反链、单篇安全读取与现算详情。
@@ -197,4 +257,4 @@ T/R 分类互斥：同时具有 trial 和 rarely 的笔记只进入“双标签�
 ./.venv/Scripts/python.exe -m pytest tests/ -q
 ```
 
-当前基线为面板 **60 passed（v1 43 + review 17）**，主仓 **225 passed**。
+当前独立 QA 实测为专项 **64 passed**、隔离面板 **136 passed**、主仓 **225 passed**，详见 `docs/qa-local-runtime.md`；在线版为 Node **66 passed**、对拍比较 **5 passed**、50 篇双引擎差异 **0**。各轮历史数字保留在 QA 报告中，不以早期全绿覆盖后续新增用例。

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -27,6 +28,7 @@ from .git_local_check import check_git_local
 from .github_check import check_github
 from .lexiang_check import check_lexiang
 from .review_api import create_review_router
+from .runtime import migrate_legacy_profile, migration_status, resolve_runtime_paths, validate_web_request
 from .user_profiles import (
     GithubRepoPreference,
     ProfileStore,
@@ -40,14 +42,14 @@ from .vault_check import check_vault
 
 logger = logging.getLogger("connect-panel")
 _STATIC_INDEX = Path(__file__).resolve().parent.parent / "static" / "index.html"
-_PROFILE_STORE_PATH = Path(__file__).resolve().parent.parent / "data" / "users.json"
+_PROFILE_COMMIT_LOCK = threading.Lock()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """首次启动仅初始化面板自管档案，不触碰主仓配置。"""
+    """未迁移的数据根保持不落盘；普通新根按原有默认档案行为启动。"""
 
-    get_profile_store().ensure_default(_default_preferences(get_settings()))
+    _profile_for_read()
     yield
 
 
@@ -95,6 +97,11 @@ class GithubRepoInput(StrictRequest):
     repo: str = Field(min_length=1, max_length=104)
 
 
+class MigrationRequest(StrictRequest):
+    confirm: bool = False
+    use_independent: bool = False
+
+
 class PreferencesPatchRequest(StrictRequest):
     vault_root: str | None = Field(default=None, min_length=1, max_length=2048)
     git_local_path: str | None = Field(default=None, min_length=1, max_length=2048)
@@ -113,9 +120,12 @@ def get_settings() -> PanelSettings:
     return _cached_settings(None)
 
 
-@lru_cache(maxsize=1)
-def get_profile_store() -> ProfileStore:
-    return ProfileStore(_PROFILE_STORE_PATH)
+@lru_cache(maxsize=4)
+def get_profile_store(profile_path: str | None = None) -> ProfileStore:
+    """按规范化路径缓存档案；显式数据目录不会读取或复制旧版档案。"""
+
+    selected_path = Path(profile_path) if profile_path is not None else resolve_runtime_paths().profile_path
+    return ProfileStore(selected_path)
 
 
 def _default_preferences(settings: PanelSettings) -> UserPreferences:
@@ -133,6 +143,31 @@ def _default_preferences(settings: PanelSettings) -> UserPreferences:
     )
 
 
+def _migration_pending() -> bool:
+    return bool(migration_status(resolve_runtime_paths())["migration_required"])
+
+
+def _default_profile() -> UserProfile:
+    """仅在内存中生成待决根的快照，不读取或写入目标路径。"""
+
+    return get_profile_store().ephemeral_default(_default_preferences(get_settings()))
+
+
+def _profile_for_read() -> UserProfile | None:
+    """迁移待决时不创建文件；没有旧档的新目录仍按原行为初始化。"""
+
+    if _migration_pending():
+        return None
+    return _profile_for_commit().get_user("default")
+
+
+def _profile_for_commit() -> ProfileStore:
+    """将待决根转成持久化新档，且不与同进程的迁移发布交错。"""
+
+    with _PROFILE_COMMIT_LOCK:
+        return _ready_profile_store()
+
+
 def _ready_profile_store() -> ProfileStore:
     store = get_profile_store()
     store.ensure_default(_default_preferences(get_settings()))
@@ -140,14 +175,25 @@ def _ready_profile_store() -> ProfileStore:
 
 
 def _get_profile(user_id: str) -> UserProfile:
-    return _ready_profile_store().get_user(user_id)
+    """普通只读检查在迁移待决时仅支持默认用户的内存档案。"""
+
+    if _migration_pending():
+        if user_id != "default":
+            raise PanelError("USER_NOT_FOUND", "迁移待决时只有默认用户的临时视图。", 404)
+        return _default_profile()
+    return _profile_for_commit().get_user(user_id)
 
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next: Any) -> Any:
     """为本地页面和 API 添加最小浏览器安全头。"""
 
-    response = await call_next(request)
+    try:
+        validate_web_request(request.method, request.headers)
+    except PanelError as exc:
+        response = JSONResponse(status_code=exc.http_status, content=_error(exc.code, exc.message))
+    else:
+        response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -204,12 +250,54 @@ def index() -> FileResponse:
     return FileResponse(_STATIC_INDEX, media_type="text/html; charset=utf-8")
 
 
+@app.get("/api/health")
+def health() -> dict[str, Any]:
+    """仅暴露本机服务状态，不扫描用户文件，也不泄漏数据目录。"""
+
+    return _ok(
+        {
+            "service": "mtrp-review-workbench",
+            "ready": True,
+            "local_only": True,
+            "host": "127.0.0.1",
+            "version": app.version,
+            **migration_status(resolve_runtime_paths()),
+        }
+    )
+
+
+@app.post("/api/runtime/migrate")
+def migrate_runtime(payload: MigrationRequest) -> dict[str, Any]:
+    """只有明确确认才复制旧档案，不自动移动、合并或删除源文件。"""
+
+    if payload.use_independent:
+        with _PROFILE_COMMIT_LOCK:
+            if not _migration_pending():
+                raise PanelError("MIGRATION_NOT_AVAILABLE", "当前没有待决的旧版档案迁移。", 409)
+            store = _ready_profile_store()
+        return _ok({
+            "initialized": True,
+            "migration_required": False,
+            "user": profile_to_dict(store.get_user("default")),
+            "message": "已使用独立目录建立新档案；旧版档案保持不变。",
+        })
+    if not payload.confirm:
+        raise PanelError("MIGRATION_CONFIRMATION_REQUIRED", "迁移旧档案前必须明确确认。")
+    with _PROFILE_COMMIT_LOCK:
+        return _ok(migrate_legacy_profile(resolve_runtime_paths()))
+
+
 @app.get("/api/overview")
 def overview(user_id: str = Query(default="default", pattern=_USER_ID_PATTERN)) -> dict[str, Any]:
     """返回指定用户的预填偏好；不做文件扫描或网络探测。"""
 
     settings = get_settings()
-    profile = _get_profile(user_id)
+    if _migration_pending():
+        profile = _default_profile() if user_id == "default" else None
+    else:
+        profile = _profile_for_commit().get_user(user_id)
+    if profile is None:
+        raise PanelError("USER_NOT_FOUND", "迁移待决时只有默认用户的临时视图。", 404)
     preferences = profile.preferences
     repository = (
         preferences.github_repos[0]
@@ -276,20 +364,24 @@ def overview(user_id: str = Query(default="default", pattern=_USER_ID_PATTERN)) 
 
 @app.get("/api/users")
 def list_users() -> dict[str, Any]:
-    users = _ready_profile_store().list_users()
+    """迁移待决时返回空清单；不将临时默认视图伪装成已保存用户。"""
+
+    if _migration_pending():
+        return _ok([])
+    users = _profile_for_commit().list_users()
     return _ok([profile_to_dict(user) for user in users])
 
 
 @app.post("/api/users", status_code=201)
 def create_user(payload: CreateUserRequest) -> dict[str, Any]:
-    user = _ready_profile_store().create_user(payload.display_name, payload.role)
+    user = _profile_for_commit().create_user(payload.display_name, payload.role)
     return _ok({"user": profile_to_dict(user), "created": True})
 
 
 @app.patch("/api/users/{user_id}/preferences")
 def update_preferences(user_id: str, payload: PreferencesPatchRequest) -> dict[str, Any]:
     patch = payload.model_dump(exclude_unset=True)
-    user = _ready_profile_store().update_preferences(user_id, patch)
+    user = _profile_for_commit().update_preferences(user_id, patch)
     return _ok({"user": profile_to_dict(user), "updated": True})
 
 
@@ -362,7 +454,7 @@ def recent_audit(limit: int = Query(default=10, ge=1, le=100)) -> dict[str, Any]
     return _ok({"events": events, "count": len(events), "limit": limit, "read_only": True})
 
 
-app.include_router(create_review_router(get_settings, get_profile_store))
+app.include_router(create_review_router(get_settings, get_profile_store, _profile_for_commit, _migration_pending))
 
 
-__all__ = ["app", "get_settings"]
+__all__ = ["app", "get_profile_store", "get_settings"]

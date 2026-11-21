@@ -21,6 +21,7 @@ from pydantic import Field
 
 from .api_common import USER_ID_PATTERN, StrictRequest, ok
 from .review_scan import load_file_detail, read_current_file, scan_review_listing
+from .runtime import resolve_runtime_paths
 from .review_store import (
     REVIEW_BATCH_MAX_ITEMS,
     ReviewState,
@@ -186,19 +187,21 @@ def _write_export_pair(
     items: list[dict[str, Any]],
     user_id: str,
     timestamp: datetime,
+    exports_dir: Path | None = None,
 ) -> tuple[Path, Path]:
     """成对写临时文件并替换；失败时清理本次产物，不触碰历史导出。"""
 
+    output_dir = _EXPORTS_DIR if exports_dir is None else exports_dir
     temporary_paths: set[Path] = set()
     replaced_paths: list[Path] = []
     try:
-        _EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
         stem_base = f"review-{user_id}-{timestamp.strftime('%Y%m%d-%H%M%S')}"
         suffix = 1
         while True:
             stem = stem_base if suffix == 1 else f"{stem_base}-{suffix}"
-            json_path = _EXPORTS_DIR / f"{stem}.json"
-            csv_path = _EXPORTS_DIR / f"{stem}.csv"
+            json_path = output_dir / f"{stem}.json"
+            csv_path = output_dir / f"{stem}.csv"
             if not json_path.exists() and not csv_path.exists():
                 break
             suffix += 1
@@ -209,7 +212,7 @@ def _write_export_pair(
             newline="\n",
             prefix=f".{stem}-",
             suffix=".json.tmp",
-            dir=_EXPORTS_DIR,
+            dir=output_dir,
             delete=False,
         ) as stream:
             json_temporary = Path(stream.name)
@@ -225,7 +228,7 @@ def _write_export_pair(
             newline="",
             prefix=f".{stem}-",
             suffix=".csv.tmp",
-            dir=_EXPORTS_DIR,
+            dir=output_dir,
             delete=False,
         ) as stream:
             csv_temporary = Path(stream.name)
@@ -276,8 +279,20 @@ def _write_export_pair(
 def create_review_router(
     settings_factory: Callable[[], PanelSettings],
     profile_store_factory: Callable[[], ProfileStore],
+    writable_profile_store_factory: Callable[[], ProfileStore] | None = None,
+    migration_pending_factory: Callable[[], bool] | None = None,
 ) -> APIRouter:
-    """以 main 的配置与 ProfileStore 单例构造审核路由，不创建第二写者。"""
+    """以 main 的档案工厂区分只读和提交；空工厂保留既有测试与兼容调用。"""
+
+    writable_factory = profile_store_factory if writable_profile_store_factory is None else writable_profile_store_factory
+    migration_pending = (lambda: False) if migration_pending_factory is None else migration_pending_factory
+
+    def review_state_for_read(store: ProfileStore, user_id: str) -> ReviewState:
+        if migration_pending():
+            if user_id != "default":
+                raise PanelError("USER_NOT_FOUND", "迁移待决时只有默认用户的临时审核视图。", 404)
+            return ReviewState()
+        return store.get_user_review(user_id)
 
     router = APIRouter(prefix="/api/review")
     cache = ReviewScanCache()
@@ -286,11 +301,13 @@ def create_review_router(
     @router.post("/scan")
     def scan(payload: ReviewScanRequest) -> dict[str, Any]:
         settings = settings_factory()
-        profile = profile_store_factory().get_user(payload.user_id)
+        profile = None if migration_pending() else profile_store_factory().get_user(payload.user_id)
         raw_path = (
             payload.path
             if payload.path is not None
-            else profile.preferences.vault_root or settings.obsidian.vault_root
+            else (
+                profile.preferences.vault_root if profile is not None else ""
+            ) or settings.obsidian.vault_root
         )
         listing = scan_review_listing(
             raw_path,
@@ -314,7 +331,7 @@ def create_review_router(
         normalized_path = _review_path(path)
         listing_item = _scan_member(snapshot, normalized_path)
         detail = load_file_detail(snapshot.root, listing_item, snapshot.config)
-        state = profile_store_factory().get_user_review(user_id)
+        state = review_state_for_read(profile_store_factory(), user_id)
         record = (state.items or {}).get(normalized_path)
         decision = None
         if record is not None:
@@ -346,7 +363,7 @@ def create_review_router(
                 409,
             )
         timestamp = datetime.now(timezone.utc).isoformat()
-        store = profile_store_factory()
+        store = writable_factory()
         updated = store.update_user_review(
             payload.user_id,
             lambda state: decide(
@@ -371,18 +388,21 @@ def create_review_router(
     def reset_item(payload: ReviewResetRequest) -> dict[str, Any]:
         snapshot = cache.get()
         normalized_path = _review_path(payload.path)
-        store = profile_store_factory()
-        if normalized_path not in snapshot.index:
-            existing = store.get_user_review(payload.user_id)
-            if normalized_path not in (existing.items or {}):
+        # 先验证要撤销的记录是否存在，失败的 reset 不得成为首次建档的隐式写操作。
+        read_store = profile_store_factory()
+        existing = review_state_for_read(read_store, payload.user_id)
+        previous = (existing.items or {}).get(normalized_path)
+        if previous is None:
+            if normalized_path not in snapshot.index:
                 _scan_member(snapshot, normalized_path)
+            raise PanelError("REVIEW_ITEM_NOT_DECIDED", "该篇没有可撤销的审核记录。", 404)
+        store = writable_factory()
         captured: dict[str, Any] = {}
 
         def apply_reset(state: ReviewState) -> ReviewState:
             previous = (state.items or {}).get(normalized_path)
             updated = reset(state, normalized_path, payload.mode, datetime.now(timezone.utc).isoformat())
-            if previous is not None:
-                captured["removed"] = record_to_dict(previous)
+            captured["removed"] = record_to_dict(previous)
             captured["history_tail"] = history_event_to_dict((updated.history or [])[-1])
             return updated
 
@@ -401,7 +421,7 @@ def create_review_router(
         user_id: str = Query(default="default", pattern=USER_ID_PATTERN),
         history_limit: int = Query(default=50, ge=1, le=200),
     ) -> dict[str, Any]:
-        state = profile_store_factory().get_user_review(user_id)
+        state = review_state_for_read(profile_store_factory(), user_id)
         data = state_to_dict(state)
         data["history"] = list(reversed(data["history"]))[:history_limit]
         return ok(data)
@@ -413,7 +433,7 @@ def create_review_router(
         if payload.path is not None:
             normalized_path = _review_path(payload.path)
             _scan_member(snapshot, normalized_path)
-        updated = profile_store_factory().update_user_review(
+        updated = writable_factory().update_user_review(
             payload.user_id,
             lambda state: replace(state, last_position=normalized_path),
         )
@@ -426,15 +446,21 @@ def create_review_router(
     ) -> dict[str, Any]:
         snapshot = cache.get()
         store = profile_store_factory()
-        profile = store.get_user(user_id)
-        state = store.get_user_review(user_id)
-        global_summary = None
-        if profile.role == "owner":
-            all_states = {
-                user.user_id: store.get_user_review(user.user_id)
-                for user in store.list_users()
-            }
-            global_summary = compute_global(snapshot.listing, all_states)
+        if migration_pending():
+            if user_id != "default":
+                raise PanelError("USER_NOT_FOUND", "迁移待决时只有默认用户的临时审核视图。", 404)
+            state = ReviewState()
+            global_summary = None
+        else:
+            profile = store.get_user(user_id)
+            state = store.get_user_review(user_id)
+            global_summary = None
+            if profile.role == "owner":
+                all_states = {
+                    user.user_id: store.get_user_review(user.user_id)
+                    for user in store.list_users()
+                }
+                global_summary = compute_global(snapshot.listing, all_states)
         data = {
             "total": snapshot.listing["total"],
             "scanned_at": snapshot.listing["scanned_at"],
@@ -455,7 +481,10 @@ def create_review_router(
             )
         snapshot = cache.get()
         store = profile_store_factory()
-        store.get_user(payload.user_id)
+        if not migration_pending():
+            store.get_user(payload.user_id)
+        elif payload.user_id != "default":
+            raise PanelError("USER_NOT_FOUND", "迁移待决时只有默认用户的临时审核视图。", 404)
         results: list[dict[str, Any]] = []
         prepared: list[dict[str, Any]] = []
         by_error: dict[str, int] = {}
@@ -490,6 +519,7 @@ def create_review_router(
             )
 
         if prepared:
+            store = writable_factory()
             timestamp = datetime.now(timezone.utc).isoformat()
 
             def apply_batch(state: ReviewState) -> ReviewState:
@@ -507,7 +537,7 @@ def create_review_router(
 
             updated = store.update_user_review(payload.user_id, apply_batch)
         else:
-            updated = store.get_user_review(payload.user_id)
+            updated = review_state_for_read(store, payload.user_id)
 
         invalid_yaml_decided = 0
         for accepted in prepared:
@@ -538,7 +568,7 @@ def create_review_router(
     @router.post("/export")
     def export(payload: ReviewExportRequest) -> dict[str, Any]:
         snapshot = cache.get()
-        state = profile_store_factory().get_user_review(payload.user_id)
+        state = review_state_for_read(profile_store_factory(), payload.user_id)
 
         def fresh_sha(path: str) -> str | None:
             listing_item = snapshot.index.get(path)
@@ -574,6 +604,12 @@ def create_review_router(
                 }
             )
 
+        if migration_pending():
+            raise PanelError(
+                "MIGRATION_DECISION_REQUIRED",
+                "尚未提交独立档案，不能导出审核记录；请先迁移或明确使用独立目录。",
+                409,
+            )
         timestamp = datetime.now(timezone.utc)
         exported_at = timestamp.isoformat()
         scope_note = (
@@ -608,6 +644,7 @@ def create_review_router(
                 items,
                 payload.user_id,
                 timestamp,
+                resolve_runtime_paths().data_dir / "exports",
             )
         return ok(
             {
@@ -615,6 +652,12 @@ def create_review_router(
                     "json": f"data/exports/{json_path.name}",
                     "csv": f"data/exports/{csv_path.name}",
                 },
+                # 旧字段仅为源码开发路径兼容；真实本机位置仅暴露给回环面板，不新增下载接口。
+                "files_absolute": {
+                    "json": str(json_path.resolve()),
+                    "csv": str(csv_path.resolve()),
+                },
+                "export_location": "当前数据目录/exports",
                 "counts": {
                     "exported_items": len(items),
                     "excluded_stale": selection["excluded_stale"],

@@ -1,0 +1,6 @@
+# 独立打包环境、PyInstaller 中间产物与本地分发候选不进入版本库。
+.venv/
+build*/
+dist*/
+__pycache__/
+*.pyc

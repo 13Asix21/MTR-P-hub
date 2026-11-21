@@ -1,0 +1,379 @@
+{
+  "schema_version": "1",
+  "generator": "online/parity/build_fixture.py",
+  "privacy": "synthetic public test content only",
+  "expected_managed_markdown": 44,
+  "expected_stage2_managed_markdown": 6,
+  "expected_combined_fixture_count": 50,
+  "fixture_tree_sha256": "813a812bfcf3f623338d467757a7d9b699c42283e4f86ca21ea38c5bb5d63bd9",
+  "files": [
+    {
+      "path": "2-Permanent/invalid/01-unclosed.md",
+      "case_id": "01",
+      "intent": "首行 --- 无闭合，INVALID_YAML",
+      "sha256": "9030e96295d4f37abf020d59bd32464f5cac42e9bf5bf4444485dc132fdf6cd4",
+      "size_bytes": 27,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/02-syntax.md",
+      "case_id": "02",
+      "intent": "YAML 语法错，INVALID_YAML",
+      "sha256": "db9eb0d5dc6b6fa2f00f3b0666d38fa0bb2a968edef742e1dd91f370f2637c3a",
+      "size_bytes": 23,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/03-sequence.md",
+      "case_id": "03",
+      "intent": "frontmatter 序列而非 mapping",
+      "sha256": "2da50b6008d3edce0f9fe8ae8d018942b573e8b156b5b393ad0466b3b616775f",
+      "size_bytes": 21,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/04-duplicate.md",
+      "case_id": "04",
+      "intent": "重复键拒绝",
+      "sha256": "6da727025821c1ebb15ce8383a0c88dfb3d4f0779307e2590d65f52ea08b3d1d",
+      "size_bytes": 31,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/05-tags-int.md",
+      "case_id": "05",
+      "intent": "tags int 非法",
+      "sha256": "3437c780c0918a455451be028afe60431f5669e6182293694ef9277c4bbfa2b7",
+      "size_bytes": 22,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/06-tags-mixed.md",
+      "case_id": "06",
+      "intent": "tags list 混入非 str",
+      "sha256": "0126e6ada65a83b2a1c03cf5000c2045dcdb8b6402e0d371724f92ac0c327bb1",
+      "size_bytes": 26,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/07-tags-bool.md",
+      "case_id": "07",
+      "intent": "tags bool 非法",
+      "sha256": "f7da2f2cbef36734bc60a1b244372f946cf186087d365d56afc4a66edb6c639b",
+      "size_bytes": 24,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/07b-tags-null.md",
+      "case_id": "07-null",
+      "intent": "tags null 非法",
+      "sha256": "c63417fab086caab5c972fe0dc29ba8e48cd79de07b88701fd8d4c2e84f8bbb3",
+      "size_bytes": 24,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/07c-tags-object.md",
+      "case_id": "07-object",
+      "intent": "tags mapping 非法",
+      "sha256": "558ad1377b7140e8d30d00f5ed77e728a383ef5f29e2e261205b383d8fdea4a8",
+      "size_bytes": 26,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/07d-tags-nested.md",
+      "case_id": "07-nested",
+      "intent": "tags 嵌套数组非法",
+      "sha256": "14e9c48de292ebd4fa7be919adb118d6e47c6f8e1fbc18a05c9d53741f1b5812",
+      "size_bytes": 25,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/07e-multidoc.md",
+      "case_id": "07-multidoc",
+      "intent": "frontmatter 多文档非法",
+      "sha256": "b24d63b349b7798d0b3c63472d2b02c04bc6b5ea6bb36eb21779485f39af8b33",
+      "size_bytes": 35,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/invalid/07f-unclosed-quote.md",
+      "case_id": "07-quote",
+      "intent": "YAML 未闭合引号非法",
+      "sha256": "0f41a46c64d68257ff6d292be9730f786a6f5bbf57271b68005014976315120f",
+      "size_bytes": 26,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/encoding/08-bom-crlf.md",
+      "case_id": "08",
+      "intent": "BOM + CRLF 原文 hash 与解析",
+      "sha256": "73256f542c8d0553afd88e8d5f0940c883d3e6b92262c0efef525a7662845a34",
+      "size_bytes": 66,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/encoding/09-bom-no-frontmatter.md",
+      "case_id": "09",
+      "intent": "BOM 无 frontmatter",
+      "sha256": "f4950482298f5fae801e3d25f67795e5e25a91e0ec51419fe50c60f65a1c75f4",
+      "size_bytes": 28,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/encoding/10-mixed-crlf.md",
+      "case_id": "10",
+      "intent": "混合 CRLF/LF 不改写原始字节",
+      "sha256": "ac94f64fa66700bc3cf74111b03f7f9ea5dcc1b090381ca0b7e079cb666986c1",
+      "size_bytes": 33,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/encoding/11-latin1.md",
+      "case_id": "11",
+      "intent": "非法 UTF-8，INVALID_ENCODING",
+      "sha256": "4204fb01fe57499d8b506394f396be2336da4ffa74dfeca6eeea72578f0dcbdc",
+      "size_bytes": 22,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/encoding/12-empty.md",
+      "case_id": "12",
+      "intent": "空文件可解析、无标签",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/valid/13-no-frontmatter.md",
+      "case_id": "13",
+      "intent": "无 frontmatter 纯正文",
+      "sha256": "6221b8e3aac12010a67629c6adbf4d3c91dada987a4a52d6127f8c4f287cdf03",
+      "size_bytes": 29,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/valid/14-tags-string.md",
+      "case_id": "14",
+      "intent": "tags 字符串空格拆分并 lstrip #",
+      "sha256": "b92e47d0d0ba65bdbd3537f7aa8ec0eeb3817e58586358ec0d1a167e0cb891a0",
+      "size_bytes": 37,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/valid/15-tags-list.md",
+      "case_id": "15",
+      "intent": "tags list 全 str",
+      "sha256": "12e6a50951ffdde6aad78d0f1c15d15e4e1d3487dc623e8fb5127c15193d3ebc",
+      "size_bytes": 47,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/valid/16-empty-mapping.md",
+      "case_id": "16",
+      "intent": "空 frontmatter mapping",
+      "sha256": "b798967e97edb1a5ba916ddff44964faa067b0ed348af17ea3aa6e617730aa64",
+      "size_bytes": 13,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/valid/17-title-strip.md",
+      "case_id": "17",
+      "intent": "title strip",
+      "sha256": "fe2d627fb117573222d255bc08561f9d4d1278316637fd509960161b15c3fac0",
+      "size_bytes": 41,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/valid/18-body-blank-line.md",
+      "case_id": "18",
+      "intent": "frontmatter 后空行保留",
+      "sha256": "6519636363f8df053d168245e0b64a2f8fed2ec15c18534dde47e9bda093d2eb",
+      "size_bytes": 39,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/tags/19-fences.md",
+      "case_id": "19",
+      "intent": "两种代码围栏内假标签/链接排除",
+      "sha256": "d7552c421ed159e5748d6aaa921d0b51c8caa979f230cb3caa47914e33a91477",
+      "size_bytes": 76,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/tags/20-inline-code.md",
+      "case_id": "20",
+      "intent": "行内代码排除",
+      "sha256": "b10ed056be04513324aaa819d9b1420768f163fba146961a3173c85a42a6994a",
+      "size_bytes": 52,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/tags/21-indented.md",
+      "case_id": "21",
+      "intent": "四空格与 tab 缩进排除",
+      "sha256": "eda3d3d9c495fbaad3f53af10677aaa380c7110a76bc47d52a5d3ccdcee36b84",
+      "size_bytes": 40,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/tags/22-conflict.md",
+      "case_id": "22",
+      "intent": "trial+rarely conflict 优先级",
+      "sha256": "3219259984ccb7f91e18ac0719835e655909e00fc704d6a3f3791aa9e94899a3",
+      "size_bytes": 34,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/tags/23-negative.md",
+      "case_id": "23",
+      "intent": "标签后缀与前置负边界",
+      "sha256": "e0e0434f8712305d92fe60f380e1bc1f60f6cd7b52b931b2eb32341772d26619",
+      "size_bytes": 53,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/links/24-wikilinks.md",
+      "case_id": "24",
+      "intent": "wiki 别名、空目标、中文与代码排除",
+      "sha256": "218bc986e2a9818631b8635a3f55656bb7bd58aa7e7562289583263206a514dc",
+      "size_bytes": 96,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/links/target.md",
+      "case_id": "24-target",
+      "intent": "唯一 basename 反链目标",
+      "sha256": "797972fac2819c746639cebf6df7658f965dffca1ff008c7c7b40b4b4881fda6",
+      "size_bytes": 12,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/links/中文路径.md",
+      "case_id": "24-target-zh",
+      "intent": "中文反链目标",
+      "sha256": "e6670e8642edcae49b3b12038b5d4f1dae8450d321da243f83406cf2ebd0b338",
+      "size_bytes": 14,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/filter/25-NOTE.MD",
+      "case_id": "25",
+      "intent": "大写 .MD 后缀入选",
+      "sha256": "7fe0420c0ca2b71a89a5f722c93edfbc09a125d89fd4644b3661f4c92fc8d394",
+      "size_bytes": 11,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/filter/30-a/b/c/deep.md",
+      "case_id": "30",
+      "intent": "三层嵌套目录",
+      "sha256": "6544c9ba72ad29f7b038172c1c64d7cd61a9eb5c13a766ac262fd3aa4e6ccf81",
+      "size_bytes": 31,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/filter/28-one-mib.md",
+      "case_id": "28",
+      "intent": "1 MiB 上边界入选并计算 hash",
+      "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b",
+      "size_bytes": 1048576,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/filter/29-too-large.md",
+      "case_id": "29",
+      "intent": "1 MiB+1 FILE_TOO_LARGE 且不读正文",
+      "sha256": "4467fb0cbdd4eb4b35550cd17ed9c5fb3200d9a3837a692a7c69827685fe4fdf",
+      "size_bytes": 1048577,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unicode/31-中文目录/中文 笔记.md",
+      "case_id": "31",
+      "intent": "NFC 中文与空格路径",
+      "sha256": "8397244a75d2f3f70b44d92945f615fca98da8fa0ce3d75c0089f9c3ba5a0311",
+      "size_bytes": 29,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unicode/32-näive.md",
+      "case_id": "32",
+      "intent": "NFD 路径 NFC 键",
+      "sha256": "f4e799da55bce9dac38e466338c24a357c886b92896664004bcdcc0467d96f3c",
+      "size_bytes": 14,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unicode/33-全角／space note.md",
+      "case_id": "33",
+      "intent": "全角与空格混排",
+      "sha256": "4aa2576f26c27bb1ec19054442b4d09a67d26263efca243900f1579e52527bb3",
+      "size_bytes": 22,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unicode/34-café.md",
+      "case_id": "34",
+      "intent": "NFC/NFD 同键警告之 NFC 项",
+      "sha256": "ac2702a7b3af898f62994f0178b3e67e2d1b2f127501b13d6f1fb45858ea7473",
+      "size_bytes": 12,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unicode/34-café.md",
+      "case_id": "34",
+      "intent": "NFC/NFD 同键警告之 NFD 项",
+      "sha256": "4e333edd80f82d4ce79547859d03be3a5e76a4267d67435bea9b879f4984c588",
+      "size_bytes": 12,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unicode/casefold-strasse-ß.md",
+      "case_id": "casefold-1",
+      "intent": "Python casefold ß→ss",
+      "sha256": "51abd7862d52f05326b1c5f40bf1cd9fa26f77d64de846861a45e2442cec994c",
+      "size_bytes": 17,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/unicode/casefold-dotted-İ.md",
+      "case_id": "casefold-2",
+      "intent": "Python casefold İ→i+combining dot",
+      "sha256": "3052e1f8ecb6736bbb25428ea9e2e9bd8a94bb2b114b50c73af88360bc901e82",
+      "size_bytes": 18,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/yaml/scalars.md",
+      "case_id": "detail-scalars",
+      "intent": "frontmatter 值类型与 JSON 展示",
+      "sha256": "a2a882da56c4e52f8e5ed9e51f847bca4bea76459cc5ceaf9c16dedf7e4ce7b7",
+      "size_bytes": 166,
+      "managed": true
+    },
+    {
+      "path": "2-Permanent/Resources/MTR-P-System/x.md",
+      "case_id": "27",
+      "intent": "excluded root 一不入选",
+      "sha256": "4ac27ae4c5176ff264aa49a8dcae4f571556c39acb44c1b7f3b0a40fa0d200d8",
+      "size_bytes": 20,
+      "managed": false
+    },
+    {
+      "path": "2-Permanent/Areas/AI-Assets/_templates/y.md",
+      "case_id": "27",
+      "intent": "excluded root 二不入选",
+      "sha256": "3c562f15be8544ff9b38965cca0d0bcba11f328debc23966c265679966121160",
+      "size_bytes": 21,
+      "managed": false
+    },
+    {
+      "path": "2-Permanent/Resources/MTR-P-System2/kept.md",
+      "case_id": "27-boundary",
+      "intent": "完整路径段排除，A/B2 不误排",
+      "sha256": "6611019ca81f4788ceac96919b3e07458bea66045e6606ddf4ca721f7664e422",
+      "size_bytes": 20,
+      "managed": true
+    }
+  ]
+}

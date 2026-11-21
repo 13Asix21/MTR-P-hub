@@ -1,0 +1,34 @@
+schema_version: "1"
+obsidian:
+  mode: ""
+  vault_id: ""
+  vault_root: ""
+  managed_roots:
+    - {root_id: permanent, path: 2-Permanent}
+  excluded_roots:
+    - 2-Permanent/Resources/MTR-P-System
+    - 2-Permanent/Areas/AI-Assets/_templates
+  trial_tag: mtr/trial
+  rarely_tag: mtr/rarely
+  read_only: true
+  follow_symlinks: false
+  g1_confirmed: false
+  max_file_bytes: 1048576
+  max_scan_files: 5000
+  max_results: 100
+lexiang_m:
+  mode: ""
+  team_id: ""
+  space_id: ""
+  root_entry_id: ""
+  read_only: true
+  timeout_seconds: 10
+github_p:
+  mode: ""
+  read_only: true
+  timeout_seconds: 10
+  repositories:
+    - project_id: mtrp
+      repo_id: mtrp-principles
+      owner: 13Asix21
+      repo: MTR-P

@@ -1,0 +1,6 @@
+schema_version: "1"
+stores:
+  - {store_id: p, kind: P, adapter: fake, read_only: true}
+  - {store_id: m, kind: M, adapter: fake, read_only: true}
+  - {store_id: t, kind: T, adapter: fake, read_only: true, vault_id: default, view_tag: mtr/trial}
+  - {store_id: r, kind: R, adapter: fake, read_only: true, vault_id: default, view_tag: mtr/rarely}

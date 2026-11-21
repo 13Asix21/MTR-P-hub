@@ -1,0 +1,9 @@
+schema_version: "1"
+projects:
+  - project_id: mtrp
+    repositories:
+      - repo_id: mtrp-principles
+        default_branch: main
+        adr_paths: [docs/adr]
+        locations: []
+        workspaces: []
