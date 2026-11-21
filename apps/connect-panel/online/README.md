@@ -11,9 +11,11 @@
 不要双击 `index.html` 以 `file://` 打开；ES modules、Service Worker、持久化授权需要 HTTP(S) Origin。
 
 ```bash
-# 从仓库根目录启动仅回环的静态服务器
-./.venv/Scripts/python.exe -m http.server 8080 --bind 127.0.0.1 --directory apps/connect-panel/online
+# 从仓库根目录启动仅回环的静态服务器（已修正 Windows 下 .mjs 的 MIME）
+./.venv/Scripts/python.exe apps/connect-panel/online/serve.py --port 8080
 ```
+
+不要用普通的 `python -m http.server` 替代：部分 Python/Windows 环境会把 `.mjs` 返回为 `text/plain`，导致浏览器拒绝加载 ES module，页面停在“正在检查浏览器目录读取能力”。`serve.py` 固定监听 `127.0.0.1`，并设置 `.js/.mjs/.webmanifest/.css/.svg/.png` 的正确 Content-Type。
 
 当前实测环境使用本机 Chrome；Edge 等具备 File System Access API 的桌面浏览器尚未单独验收。打开 `http://127.0.0.1:8080/`，点击“选择 Vault 目录”并在 Chrome 授权对话框中选择所需 Vault，授予**只读**访问。选错目录、取消授权或权限失效时不要继续审核，按页面提示重新选择。其他浏览器应显示能力边界，不以模拟句柄冒充可用。键盘焦点不在输入框时，J/K 导航，A/R/S 审核，U 撤销。
 
