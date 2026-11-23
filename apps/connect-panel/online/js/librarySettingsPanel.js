@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123f';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123g';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -10,9 +10,10 @@ import {
   emptyConfig,
   loadConnections,
   normalizeConfig,
-  probeGithub,
   saveConnection,
-} from './librarySettings.js?v=20261123f';
+  testConnection,
+} from './librarySettings.js?v=20261123g';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123g';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -28,38 +29,13 @@ function button(document, text, className, onClick) {
   return node;
 }
 
-const FIELD_SCHEMA = {
-  m: [
-    { key: 'space_id', label: '乐享空间 ID', placeholder: '例如 c3f157b3d03d4c7fa46a8fb8e70b1ae7' },
-    { key: 'path', label: '目标路径（相对知识库根）', placeholder: '例如 研发/工业视觉，留空表示根目录' },
-    { key: 'proxy_url', label: '乐享代理地址（独立应用链接）', placeholder: 'https://mtrp-lexiang-proxy.app.workbuddy.host' },
-    { key: 'sharecode', label: '代理 sharecode', placeholder: '代理分享链接里 sharecode= 后面那串' },
-  ],
-  t: [
-    { key: 'vault_root', label: '库内起始目录（相对路径）', placeholder: '留空 = 整个库；或填 2-Permanent' },
-    { key: 'managed_roots', label: '附加目录（逗号分隔，可空）', placeholder: 'Inbox, 3-Knowledge-Graph', list: true },
-    { key: 'tags', label: '关注标签（逗号分隔，可空）', placeholder: 'mtr/trial', list: true },
-  ],
-  r: [
-    { key: 'vault_root', label: '库内起始目录（相对路径）', placeholder: '留空 = 整个库；或填 2-Permanent' },
-    { key: 'managed_roots', label: '附加目录（逗号分隔，可空）', placeholder: 'Archive', list: true },
-    { key: 'tags', label: '关注标签（逗号分隔，可空）', placeholder: 'mtr/rarely', list: true },
-  ],
-  p: [
-    { key: 'owner', label: 'GitHub 所有者', placeholder: '13Asix21' },
-    { key: 'repo', label: '仓库名', placeholder: 'MTR-P-hub' },
-    { key: 'branch', label: '分支', placeholder: 'main' },
-    { key: 'proxy_url', label: 'GitHub 代理地址（可选）', placeholder: '私有仓库或限流时填写' },
-  ],
-};
-
 export class LibrarySettingsPanel {
   constructor(documentRef, options = {}) {
     this.document = documentRef;
     this.root = null;
     this.session = null;
     this.entries = {};
-    this.drafts = {};
+    this.forms = {};
     this.busy = false;
     this.notice = null;
     this.onClose = options.onClose ?? (() => {});
@@ -264,14 +240,17 @@ export class LibrarySettingsPanel {
   async renderSettings(message = '') {
     const cloud = await getCloud();
     this.entries = await loadConnections(cloud);
-    this.drafts = {};
-    for (const [id, entry] of Object.entries(this.entries)) {
-      this.drafts[id] = { ...entry.config };
+    this.forms = {};
+    for (const library of LIBRARIES) {
+      const saved = this.entries[library.id];
+      this.forms[library.id] = saved.saved
+        ? toFormValues(library.id, saved.config)
+        : defaultsFor(library.id);
     }
     const box = el(this.document, 'div', '', 'settings-panel');
     const user = this.session?.user ?? {};
     box.append(
-      el(this.document, 'h2', '在线设置 · 我的库连接'),
+      el(this.document, 'h2', '我的库连接'),
       el(this.document, 'p', `当前账号：${user.name || user.email || user.phone || user.id || '已登录'}　配置保存在云端，仅本账号可见。`, 'settings-hint'),
       this.renderPrivacyNote(),
     );
@@ -291,9 +270,34 @@ export class LibrarySettingsPanel {
     return wrap;
   }
 
+  renderField(library, field, advanced = false) {
+    const id = `lib-${library}-${field.key}`;
+    const row = el(this.document, 'div', '', advanced ? 'settings-field is-advanced' : 'settings-field');
+    const head = el(this.document, 'div', '', 'settings-field-head');
+    const label = el(this.document, 'label', field.label + (field.required ? ' *' : ''), 'settings-label');
+    label.setAttribute('for', id);
+    head.append(label);
+    if (field.helpLink) {
+      const link = el(this.document, 'a', '点此获取', 'help-link');
+      link.href = field.helpLink.url;
+      link.target = '_blank';
+      link.rel = 'noreferrer noopener';
+      link.title = field.helpLink.label;
+      head.append(link);
+    }
+    const input = el(this.document, 'input', '', 'text-input');
+    input.id = id;
+    input.spellcheck = false;
+    input.placeholder = field.placeholder ?? '';
+    input.value = this.forms[library][field.key] ?? '';
+    input.addEventListener('input', () => { this.forms[library][field.key] = input.value; });
+    row.append(head, input);
+    if (field.helpText) row.append(el(this.document, 'p', field.helpText, 'field-help'));
+    return row;
+  }
+
   renderCard(library) {
     const entry = this.entries[library.id];
-    const draft = this.drafts[library.id];
     const card = el(this.document, 'section', '', 'settings-card');
     card.dataset.library = library.id;
 
@@ -303,67 +307,41 @@ export class LibrarySettingsPanel {
       el(this.document, 'span', entry.saved ? (entry.enabled ? '已配置' : '已停用') : '未配置', `settings-badge${entry.saved ? ' is-on' : ''}`),
     );
     card.append(head, el(this.document, 'p', library.hint, 'settings-hint'));
+    card.append(el(this.document, 'p', this.describeState(library.id, entry), 'settings-status'));
 
-    const status = el(this.document, 'p', this.describeState(library.id, entry), 'settings-status');
-    if (library.id === 'm') status.dataset.fallback = 'proxy-required';
-    if (library.id === 'p') status.dataset.fallback = 'direct-ok';
-    card.append(status);
+    const fields = el(this.document, 'div', '', 'settings-fields');
+    for (const field of FIELD_HELP[library.id] ?? []) fields.append(this.renderField(library.id, field));
+    card.append(fields);
 
-    const form = el(this.document, 'div', '', 'settings-fields');
-    for (const field of FIELD_SCHEMA[library.id]) {
-      const id = `lib-${library.id}-${field.key}`;
-      const label = el(this.document, 'label', field.label, 'settings-label');
-      label.setAttribute('for', id);
-      const input = el(this.document, 'input', '', 'text-input');
-      input.id = id;
-      input.spellcheck = false;
-      input.placeholder = field.placeholder;
-      input.value = field.list
-        ? (Array.isArray(draft[field.key]) ? draft[field.key].join(', ') : '')
-        : (draft[field.key] ?? '');
-      input.addEventListener('input', () => {
-        draft[field.key] = field.list
-          ? input.value.split(/[,，]/u).map((part) => part.trim()).filter(Boolean)
-          : input.value;
-      });
-      form.append(label, input);
+    const advancedFields = ADVANCED_FIELDS[library.id] ?? [];
+    if (advancedFields.length > 0) {
+      const details = el(this.document, 'details', '', 'settings-advanced');
+      details.append(el(this.document, 'summary', '高级设置（一般不用改）'));
+      for (const field of advancedFields) details.append(this.renderField(library.id, field, true));
+      card.append(details);
     }
-    const labelId = `lib-${library.id}-label`;
-    const labelNode = el(this.document, 'label', '显示名称（可选）', 'settings-label');
-    labelNode.setAttribute('for', labelId);
-    const labelInput = el(this.document, 'input', '', 'text-input');
-    labelInput.id = labelId;
-    labelInput.value = entry.label ?? '';
-    labelInput.addEventListener('input', () => { draft.__label = labelInput.value; });
-    form.append(labelNode, labelInput);
-    card.append(form);
 
     const actions = el(this.document, 'div', '', 'settings-actions');
-    actions.append(button(this.document, '保存到云端', 'primary-button', () => this.save(library.id)));
-    if (library.id === 'p') {
-      actions.append(button(this.document, '测试连接', 'secondary-button', () => this.probe(library.id)));
-    }
-    if (entry.saved) {
-      actions.append(button(this.document, '删除配置', 'danger-button', () => this.remove(library.id)));
-    }
+    actions.append(button(this.document, '保存', 'primary-button', () => this.save(library.id)));
+    actions.append(button(this.document, '测试连接', 'secondary-button', () => this.test(library.id)));
+    if (entry.saved) actions.append(button(this.document, '删除', 'danger-button', () => this.remove(library.id)));
     card.append(actions);
 
-    const result = el(this.document, 'p', '', 'settings-status');
+    const result = el(this.document, 'p', '', 'settings-result');
     result.dataset.role = 'result';
     card.append(result);
     return card;
   }
 
   describeState(library, entry) {
-    if (!entry.saved) return library === 'm' ? '未配置。乐享必须经服务端代理访问。' : '未配置。';
+    if (!entry.saved) return library === 'm' || library === 'p' ? '未配置，填好点「测试连接」确认可用。' : '未配置；留空即扫描整个库。';
     if (!entry.enabled) return '已停用，不会参与查询。';
     if (library === 'm') {
-      if (!entry.config.proxy_url) return '缺少代理地址，乐享暂不可用。';
-      if (!entry.config.sharecode) return '已填代理地址，但缺少 sharecode，传送会被代理拒绝。';
-      return `已配置代理 · 目标路径：${entry.config.path || '知识库根目录'}；可在审核页通过后点「传送到 M 库」。`;
+      if (!entry.config.proxy_url || !entry.config.sharecode) return '配置不完整，无法传送。';
+      return `目标：${entry.config.path || '知识库根目录'}；通过审核后可点「传送到 M 库」。`;
     }
-    if (library === 't' || library === 'r') return `目录：${entry.config.vault_root || '整个库'}；文件授权需在各机器本地授予。`;
-    if (library === 'p') return entry.config.owner && entry.config.repo ? `仓库：${entry.config.owner}/${entry.config.repo}` : '缺少仓库信息。';
+    if (library === 't' || library === 'r') return `扫描范围：${entry.config.vault_root || '整个库'}；文件授权需在本机授予。`;
+    if (library === 'p') return entry.config.owner && entry.config.repo ? `仓库：${entry.config.owner}/${entry.config.repo}（${entry.config.branch}）` : '仓库信息不完整。';
     return '';
   }
 
@@ -376,30 +354,31 @@ export class LibrarySettingsPanel {
     if (!node) return;
     node.textContent = text;
     node.classList.toggle('settings-error', isError);
+    node.classList.toggle('settings-ok', !isError && text.length > 0);
   }
 
   async save(library) {
-    if (this.busy) return;
+    if (this.busy) return null;
     this.busy = true;
     this.setCardMessage(library, '保存中…');
     try {
       const cloud = await getCloud();
-      const draft = { ...this.drafts[library] };
-      const label = draft.__label ?? this.entries[library]?.label ?? '';
-      delete draft.__label;
-      normalizeConfig(library, draft);
+      const config = buildConfig(library, this.forms[library]);
+      normalizeConfig(library, config);
       const saved = await saveConnection(cloud, library, {
-        config: draft,
-        label,
+        config,
+        label: this.entries[library]?.label ?? '',
         enabled: true,
         ownerName: this.session?.user?.name ?? null,
       });
       this.entries[library] = { ...saved, saved: true };
       this.setCardMessage(library, '已保存到云端。');
-      await this.refreshBadge(library);
+      this.refreshBadge(library);
+      return saved;
     } catch (error) {
       const message = error instanceof LibraryConfigError ? error.message : (error?.message ?? '保存失败。');
       this.setCardMessage(library, message, true);
+      return null;
     } finally {
       this.busy = false;
     }
@@ -417,15 +396,16 @@ export class LibrarySettingsPanel {
     if (status) status.textContent = this.describeState(library, entry);
   }
 
-  async probe(library) {
+  /** 先保存再测，避免测的是没存进去的旧配置。 */
+  async test(library) {
     if (this.busy) return;
+    const saved = await this.save(library);
+    if (!saved) return;
     this.busy = true;
     this.setCardMessage(library, '测试中…');
     try {
-      const draft = { ...this.drafts[library] };
-      delete draft.__label;
-      const info = await probeGithub(normalizeConfig(library, draft));
-      this.setCardMessage(library, `连接正常：${info.full_name}（默认分支 ${info.default_branch || '未知'}${info.private ? '，私有' : '，公开'}）。`);
+      const result = await testConnection(library, saved.config);
+      this.setCardMessage(library, result.message);
     } catch (error) {
       this.setCardMessage(library, error?.message ?? '测试失败。', true);
     } finally {
@@ -446,7 +426,7 @@ export class LibrarySettingsPanel {
         return;
       }
       this.entries[library] = { library, label: '', enabled: false, config: emptyConfig(library), updatedAt: null, saved: false };
-      this.drafts[library] = emptyConfig(library);
+      this.forms[library] = defaultsFor(library);
       await this.renderSettings(`已删除「${describeLibrary(library).name}」的云端配置。`);
     } catch (error) {
       this.setCardMessage(library, error?.message ?? '删除失败。', true);
@@ -465,7 +445,7 @@ export class LibrarySettingsPanel {
         this.session = null;
         this.renderLogin('已退出登录。');
       }),
-      button(this.document, '关闭设置', 'secondary-button', () => this.onClose()),
+      button(this.document, '关闭', 'secondary-button', () => this.onClose()),
     );
     const notice = el(this.document, 'p', '', 'notice');
     notice.id = 'settings-notice';

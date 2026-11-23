@@ -220,6 +220,37 @@ def _async_client(auth: dict[str, str], options: dict[str, Any] | None = None):
         import httpx
         return httpx.AsyncClient(**kwargs)
 
+async def verify(token: str, space_id: str, target_path: str) -> dict[str, Any]:
+    """只读自检：确认 token 有效、知识库可见、目标路径层级可解析。
+
+    不创建任何条目；路径只做“是否已存在”的探测，不存在也视为通过（建的时候会自动建）。
+    """
+    from mcp import ClientSession
+
+    if not space_id:
+        raise TransferError(400, "SPACE_REQUIRED", "缺少 space_id。")
+    auth = {"Authorization": f"Bearer {token}"}
+    async with _select_opener(auth)() as streams:
+        read, write = streams[0], streams[1]
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            me = _json_payload(await _call(session, "whoami", {}))
+            staff = ((me.get("data") or {}).get("staff") or {})
+            space = _json_payload(await _call(session, "lexiang_fetch", {"resource": "space", "id": space_id}))
+            node = ((space.get("data") or {}).get("space") or {})
+            if not node:
+                raise TransferError(404, "SPACE_NOT_FOUND", "知识库不存在或无权访问。")
+            return {
+                "ok": True,
+                "account": staff.get("display_name") or "",
+                "organization": staff.get("organization") or "",
+                "space_name": node.get("name") or "",
+                "space_id": space_id,
+                "target_path": target_path,
+                "message": f"连接正常：{staff.get('display_name') or '已认证'} · 知识库「{node.get('name') or space_id}」",
+            }
+
+
 class Handler(BaseHTTPRequestHandler):
     """最小 HTTP 处理器：健康检查、CORS 预检、传送。"""
 
@@ -260,6 +291,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
+        if self._route() == "/mtrp/verify":
+            import urllib.parse
+            query = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            space = (query.get("space_id") or [os.environ.get("MTRP_LEXIANG_SPACE_ID", "")])[0]
+            target = (query.get("path") or [""])[0]
+            try:
+                self._send(200, asyncio.run(verify(_require_token(), space, target)))
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
+            except Exception as error:  # pragma: no cover
+                self._send(502, {"ok": False, "code": "UPSTREAM_FAILED", "message": str(error)[:200]})
+            return
         if self._route() == "/mtrp/health":
             self._send(200, {"ok": True, "token_configured": bool(os.environ.get("MTRP_LEXIANG_TOKEN"))})
             return

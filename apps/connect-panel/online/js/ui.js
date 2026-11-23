@@ -1,8 +1,8 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123f';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123f';
-import { downloadExportPair } from './export.js?v=20261123f';
-import { renderNotePreview } from './markdownPreview.js?v=20261123f';
-import { transferApprovedNote } from './transfer.js?v=20261123f';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123g';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123g';
+import { downloadExportPair } from './export.js?v=20261123g';
+import { renderNotePreview } from './markdownPreview.js?v=20261123g';
+import { transferApprovedNote } from './transfer.js?v=20261123g';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -66,6 +66,7 @@ export class WorkbenchUi {
   mount(root) {
     this.root = root;
     this.renderEmpty();
+    this.mountTopbarSettings();
     this.restorePromise = this.prepareRestore();
     return this;
   }
@@ -181,34 +182,70 @@ export class WorkbenchUi {
     this.root.append(main);
   }
 
+  /** 右上角设置图标：任何页面都能打开，不占正文空间。 */
+  mountTopbarSettings() {
+    const topbar = this.document.querySelector('.topbar');
+    if (!topbar || topbar.querySelector('#topbar-settings')) return;
+    const icon = button(this.document, '⚙', 'topbar-icon', () => this.openSettings());
+    icon.id = 'topbar-settings';
+    icon.title = '库连接设置';
+    icon.setAttribute('aria-label', '库连接设置');
+    topbar.append(icon);
+  }
+
+  /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
+  async openFlowGuide() {
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123g');
+    const host = this.ensureSettingsOverlay();
+    host.replaceChildren();
+    const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
+    close.setAttribute('aria-label', '关闭');
+    host.append(close);
+    this.flowHost = host;
+    host.hidden = false;
+    const mConfig = await this.loadMLibraryConfig();
+    const counts = { approved: 0, rejected: 0 };
+    for (const record of Object.values(this.state?.items ?? {})) {
+      if (record?.action === 'approved') counts.approved += 1;
+      if (record?.action === 'rejected') counts.rejected += 1;
+    }
+    if (!this.flowExplainer) this.flowExplainer = new FlowExplainer(this.document, { onClose: () => this.closeSettings() });
+    this.flowExplainer.render(host, { mConfig, counts });
+  }
+
+  /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
+  async openSettings(host = null) {
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123g');
+    const target = host ?? this.ensureSettingsOverlay();
+    if (!this.settingsPanel) {
+      this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
+    }
+    this.settingsHost = target;
+    target.hidden = false;
+    await this.settingsPanel.open(target);
+    target.scrollIntoView?.({ block: 'nearest' });
+  }
+
+  ensureSettingsOverlay() {
+    const existing = this.document.querySelector('#settings-overlay');
+    if (existing) return existing;
+    const overlay = element(this.document, 'div', '', 'settings-overlay');
+    overlay.id = 'settings-overlay';
+    const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
+    close.setAttribute('aria-label', '关闭设置');
+    overlay.append(close);
+    this.document.body.append(overlay);
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) this.closeSettings(); });
+    return overlay;
+  }
+
+  /** 扫描完成后，正文里再给一个显眼的设置入口，避免用户以为要回首页。 */
   renderSettingsEntry() {
     const wrap = element(this.document, 'div', '', 'settings-entry');
-    wrap.setAttribute('aria-label', '在线设置');
-    const open = button(this.document, '在线设置 · 我的库连接', 'secondary-button', async () => {
-      const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123f');
-      if (!this.settingsPanel) {
-        this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
-      }
-      this.settingsHost = element(this.document, 'div', '', 'settings-host');
-      wrap.append(this.settingsHost);
-      await this.settingsPanel.open(this.settingsHost);
-    });
+    wrap.setAttribute('aria-label', '库连接设置');
+    const open = button(this.document, '⚙ 库连接设置', 'secondary-button', () => this.openSettings());
     open.id = 'open-settings';
-    const explain = button(this.document, '看看流转说明', 'secondary-button', async () => {
-      const { FlowExplainer } = await import('./flowExplainer.js?v=20261123f');
-      this.flowHost = element(this.document, 'div', '', 'settings-host');
-      wrap.append(this.flowHost);
-      const mConfig = await this.loadMLibraryConfig();
-      const counts = { approved: 0, rejected: 0 };
-      for (const record of Object.values(this.state?.items ?? {})) {
-        if (record?.action === 'approved') counts.approved += 1;
-        if (record?.action === 'rejected') counts.rejected += 1;
-      }
-      if (!this.flowExplainer) {
-        this.flowExplainer = new FlowExplainer(this.document, { onClose: () => this.closeFlow() });
-      }
-      this.flowExplainer.render(this.flowHost, { mConfig, counts });
-    });
+    const explain = button(this.document, '库流转说明', 'secondary-button', () => this.openFlowGuide());
     explain.id = 'open-flow-guide';
     wrap.append(open, explain);
     return wrap;
@@ -217,9 +254,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261123f');
-      const { loadConnections } = await import('./librarySettings.js?v=20261123f');
-      const { currentSession } = await import('./cloudClient.js?v=20261123f');
+      const { getCloud } = await import('./cloudClient.js?v=20261123g');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123g');
+      const { currentSession } = await import('./cloudClient.js?v=20261123g');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -232,15 +269,17 @@ export class WorkbenchUi {
   }
 
   closeFlow() {
-    this.flowHost?.replaceChildren();
-    this.flowHost?.remove();
-    this.flowHost = null;
+    this.closeSettings();
   }
 
   closeSettings() {
-    this.settingsHost?.replaceChildren();
-    this.settingsHost?.remove();
+    const overlay = this.document.querySelector('#settings-overlay');
+    if (overlay) {
+      overlay.replaceChildren();
+      overlay.hidden = true;
+    }
     this.settingsHost = null;
+    this.flowHost = null;
   }
 
   setNotice(message) {
@@ -352,7 +391,11 @@ export class WorkbenchUi {
     const rescan = button(this.document, '重新选择并扫描', 'secondary-button', () => this.renderEmpty('请重新授权目录；已读本机队列不会被清空。'));
     const clear = button(this.document, '清除本机台账…', 'danger-button', () => this.clearLocalData());
     clear.id = 'clear-local-data';
-    toolbar.append(search, filter, exportButton, rescan, clear);
+    const settingsBtn = button(this.document, '⚙ 库设置', 'secondary-button', () => this.openSettings());
+    settingsBtn.id = 'open-settings-inline';
+    const flowBtn = button(this.document, '流转说明', 'secondary-button', () => this.openFlowGuide());
+    flowBtn.id = 'open-flow-inline';
+    toolbar.append(search, filter, settingsBtn, flowBtn, exportButton, rescan, clear);
     const list = element(this.document, 'section', '', 'note-list');
     list.id = 'note-list';
     this.detailPanel = element(this.document, 'aside', '', 'detail-panel');

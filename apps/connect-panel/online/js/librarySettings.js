@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js?v=20261123f';
+import { LIBRARIES } from './cloudClient.js?v=20261123g';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
@@ -175,4 +175,37 @@ export async function probeGithub(config, fetcher = globalThis.fetch) {
 
 export function describeLibrary(library) {
   return LIBRARIES.find((item) => item.id === library) ?? { id: library, name: library, hint: '' };
+}
+
+/** 测连接：乐享走代理自检接口，GitHub 直接查仓库元数据。 */
+export async function testConnection(library, config, fetcher = globalThis.fetch) {
+  if (library === 'm') {
+    if (!config.proxy_url) throw new LibraryConfigError('M_PROXY_REQUIRED', '请先填写代理地址。');
+    if (!config.sharecode) throw new LibraryConfigError('SHARECODE_REQUIRED', '请先填写代理访问码。');
+    if (!config.space_id) throw new LibraryConfigError('SPACE_REQUIRED', '请先选择乐享知识库。');
+    const base = config.proxy_url.replace(/\/+$/u, '');
+    const url = `${base}/mtrp/verify?sharecode=${encodeURIComponent(config.sharecode)}&space_id=${encodeURIComponent(config.space_id)}&path=${encodeURIComponent(config.path ?? '')}`;
+    let response;
+    try {
+      response = await fetcher(url, { headers: { accept: 'application/json' } });
+    } catch (error) {
+      throw new LibraryConfigError('PROXY_UNREACHABLE', `连不上代理：${String(error?.message ?? error).slice(0, 60)}`);
+    }
+    if (response.status === 403) throw new LibraryConfigError('SHARECODE_REJECTED', '代理拒绝了访问：访问码不正确。');
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      throw new LibraryConfigError('M_TEST_FAILED', payload?.message ?? `自检失败（HTTP ${response.status}）。`);
+    }
+    return { ok: true, message: payload.message, detail: payload };
+  }
+  if (library === 'p') {
+    const info = await probeGithub(config, fetcher);
+    return {
+      ok: true,
+      message: `连接正常：${info.full_name}（默认分支 ${info.default_branch || '未知'}，${info.private ? '私有' : '公开'}）`,
+      detail: info,
+    };
+  }
+  // T/R 无远端服务可测，只能校验配置本身。
+  return { ok: true, message: '目录设置已保存；文件读取需在本机授权 Obsidian 文件夹后生效。', detail: null };
 }

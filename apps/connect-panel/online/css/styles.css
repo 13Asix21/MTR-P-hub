@@ -191,3 +191,57 @@ textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline:
 .flow-step h3 { margin: 0 0 4px; font-size: 15px; }
 .flow-step p { margin: 0 0 4px; font-size: 13px; line-height: 1.7; color: #3f4a45; }
 .flow-where { color: #66716c !important; }
+
+/* 右上角设置图标与浮层 */
+.topbar { position: relative; }
+.topbar-icon {
+  margin-left: auto;
+  width: 34px; height: 34px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line, #d7ded8);
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  font-size: 16px; line-height: 1;
+  color: #175d52;
+}
+.topbar-icon:hover { background: #f1f7f4; }
+.settings-overlay {
+  position: fixed; inset: 0;
+  background: rgba(18, 32, 27, .38);
+  display: flex; align-items: flex-start; justify-content: flex-end;
+  padding: 64px 28px 28px;
+  overflow: auto;
+  z-index: 50;
+}
+.settings-overlay[hidden] { display: none; }
+.settings-overlay > .settings-panel,
+.settings-overlay > .flow-page {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 96px);
+  overflow: auto;
+  box-shadow: 0 18px 48px rgba(16, 40, 32, .22);
+}
+.settings-close {
+  position: fixed; top: 20px; right: 28px;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--line, #d7ded8); background: #fff;
+  cursor: pointer; font-size: 14px; color: #4c5652;
+}
+
+/* 字段与获取引导 */
+.settings-field { display: grid; gap: 4px; }
+.settings-field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.help-link {
+  font-size: 12px; color: #175d52;
+  text-decoration: none;
+  border-bottom: 1px dashed #9fb8b0;
+  white-space: nowrap;
+}
+.help-link:hover { color: #0f4a41; }
+.field-help { margin: 0; font-size: 12px; color: #66716c; line-height: 1.5; }
+.settings-advanced { border-top: 1px dashed var(--line, #d7ded8); padding-top: 8px; }
+.settings-advanced summary { cursor: pointer; font-size: 13px; color: #55605a; }
+.settings-advanced .settings-field { margin-top: 8px; }
+.settings-result { margin: 0; font-size: 13px; min-height: 1em; }
+.settings-result.settings-ok { color: #175d52; }
