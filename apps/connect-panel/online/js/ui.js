@@ -1,8 +1,8 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123n';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123n';
-import { downloadExportPair } from './export.js?v=20261123n';
-import { renderNotePreview } from './markdownPreview.js?v=20261123n';
-import { transferApprovedNote } from './transfer.js?v=20261123n';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123o';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123o';
+import { downloadExportPair } from './export.js?v=20261123o';
+import { renderNotePreview } from './markdownPreview.js?v=20261123o';
+import { transferApprovedNote } from './transfer.js?v=20261123o';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -197,7 +197,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123n');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123o');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -217,7 +217,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123n');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123o');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -256,9 +256,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261123n');
-      const { loadConnections } = await import('./librarySettings.js?v=20261123n');
-      const { currentSession } = await import('./cloudClient.js?v=20261123n');
+      const { getCloud } = await import('./cloudClient.js?v=20261123o');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123o');
+      const { currentSession } = await import('./cloudClient.js?v=20261123o');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -483,7 +483,7 @@ export class WorkbenchUi {
     const table = element(this.document, 'table');
     const head = element(this.document, 'thead');
     const header = element(this.document, 'tr');
-    for (const label of ['选择', '相对路径', '审核', '分类', '解析状态', '出链 / 反链', '字节数']) header.append(element(this.document, 'th', label));
+    for (const label of ['选择', '相对路径', '审核', '传送', '分类', '解析状态', '出链 / 反链', '字节数']) header.append(element(this.document, 'th', label));
     head.append(header);
     const body = element(this.document, 'tbody');
     for (const item of items) {
@@ -513,7 +513,10 @@ export class WorkbenchUi {
       pathCell.append(open);
       const status = item.parse_status === 'FILE_TOO_LARGE' ? 'too_large' : reviewStatusFor(this.state.items[path], item.sha256);
       const statusText = { pending: '未审', approved: '通过', rejected: '拒绝', skipped: '跳过', stale: '内容已变更', too_large: '超限不可审' }[status];
-      row.append(selectCell, pathCell, element(this.document, 'td', statusText), element(this.document, 'td', item.mtr_state), element(this.document, 'td', item.parse_status), element(this.document, 'td', `${item.links_out} / ${item.links_in}`), element(this.document, 'td', item.size_bytes));
+      // 传送状态列：让「是否已入库」一眼可见。
+      const sent = this.transferredPaths.has(path);
+      const transferCell = element(this.document, 'td', sent ? '✓ 已传送' : (status === 'approved' ? '待传送' : '—'), sent ? 'transfer-cell is-sent' : 'transfer-cell');
+      row.append(selectCell, pathCell, element(this.document, 'td', statusText), transferCell, element(this.document, 'td', item.mtr_state), element(this.document, 'td', item.parse_status), element(this.document, 'td', `${item.links_out} / ${item.links_in}`), element(this.document, 'td', item.size_bytes));
       body.append(row);
     }
     table.append(head, body);
@@ -743,6 +746,9 @@ export class WorkbenchUi {
       this.transferredPaths.add(path);
       this.setNotice(`已传送：${path}`);
       this.updateTransferStatus();
+      // 单篇也给出明确成功反馈，并刷新表格里的「已传送」标记。
+      this.showTransferBanner(1);
+      this.renderItems();
     } catch (error) {
       if (node) {
         node.textContent = error?.message ?? '传送失败。';
@@ -868,11 +874,13 @@ export class WorkbenchUi {
           this.updateTransferStatus();
         }
       } finally {
-        this.transferJob.running = false;
+        const job = this.transferJob;
+        job.running = false;
         this.actionBusy = false;
         this.renderWorkbench();
         // renderWorkbench 会重建工具栏，状态栏需在重建后重新填充。
         this.updateTransferStatus();
+        if (job.ok > 0) this.showTransferBanner(job.ok, job.failed ? [job.lastError] : []);
       }
     });
   }
@@ -884,13 +892,45 @@ export class WorkbenchUi {
     const job = this.transferJob;
     if (!job) { bar.hidden = true; return; }
     bar.hidden = false;
-    const parts = [`传送 ${job.done}/${job.total}`];
-    if (job.ok) parts.push(`成功 ${job.ok}`);
-    if (job.failed) parts.push(`失败 ${job.failed}`);
-    if (job.running) parts.push('进行中…');
-    bar.textContent = parts.join(' · ') + (job.lastError ? `　最近失败：${job.lastError}` : '');
-    bar.classList.toggle('is-error', Boolean(job.failed) && !job.running);
-    bar.classList.toggle('is-done', !job.running && job.failed === 0);
+    if (job.running) {
+      bar.textContent = `正在传送到乐享知识库… ${job.done}/${job.total}` + (job.ok ? `（已成功 ${job.ok}）` : '');
+      bar.classList.remove('is-done', 'is-error');
+      return;
+    }
+    if (job.failed === 0) {
+      bar.textContent = `✓ 传送成功：${job.ok} 篇已写入乐享知识库「M库范式」`;
+      bar.classList.add('is-done');
+      bar.classList.remove('is-error');
+      return;
+    }
+    const tail = job.ok > 0 ? `成功 ${job.ok} 篇` : '全部失败';
+    bar.textContent = `⚠ 传送结束：${tail}，失败 ${job.failed} 篇${job.lastError ? `　最近失败：${job.lastError}` : ''}`;
+    bar.classList.add('is-error');
+    bar.classList.remove('is-done');
+  }
+
+  /** 传送成功横幅：醒目展示结果与条目直达入口，可手动关闭。 */
+  showTransferBanner(successCount, failures = []) {
+    this.root.querySelector('#transfer-banner')?.remove();
+    const failed = failures.length > 0;
+    const banner = element(this.document, 'div', '', failed ? 'transfer-banner is-warn' : 'transfer-banner is-ok');
+    banner.id = 'transfer-banner';
+    banner.setAttribute('role', failed ? 'alert' : 'status');
+    banner.append(
+      element(this.document, 'span', failed ? '⚠' : '✓', 'banner-mark'),
+      element(
+        this.document,
+        'span',
+        failed
+          ? `传送到乐享完成：${successCount} 篇成功，${failures.length} 篇失败`
+          : `传送成功：${successCount} 篇笔记已写入乐享知识库「M库范式」`,
+        'banner-text',
+      ),
+    );
+    const close = button(this.document, '知道了', 'banner-close', () => banner.remove());
+    banner.append(close);
+    const host = this.root.querySelector('#transfer-status');
+    host?.after(banner) ?? this.root.querySelector('main')?.prepend(banner);
   }
 
   async exportApproved(control) {

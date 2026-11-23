@@ -1,6 +1,6 @@
-import { readBrowserDetail, readCurrentSha } from './browserScan.js?v=20261123n';
-import { sha256Bytes } from './hasher.js?v=20261123n';
-import { ReviewError, decide, reset, validateState } from './reviewDomain.js?v=20261123n';
+import { readBrowserDetail, readCurrentSha } from './browserScan.js?v=20261123o';
+import { sha256Bytes } from './hasher.js?v=20261123o';
+import { ReviewError, decide, reset, validateState } from './reviewDomain.js?v=20261123o';
 
 export function utcTimestamp(now = new Date()) {
   const date = now instanceof Date ? now : new Date(now);

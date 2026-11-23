@@ -63,3 +63,28 @@ test('单篇失败不影响其余继续', () => {
   assert.equal(job.failed, 1);
   assert.equal(summarize(job), '传送 3/3 · 成功 2 · 失败 1');
 });
+
+test('成功后状态栏使用明确的成功文案', () => {
+  const job = { total: 2, done: 2, ok: 2, failed: 0, running: false };
+  const text = job.failed === 0
+    ? `✓ 传送成功：${job.ok} 篇已写入乐享知识库「M库范式」`
+    : '';
+  assert.match(text, /传送成功/u);
+  assert.match(text, /2 篇/u);
+  assert.match(text, /乐享知识库/u);
+});
+
+test('部分失败时明确区分成功与失败数量', () => {
+  const job = { total: 3, done: 3, ok: 2, failed: 1, running: false };
+  const tail = job.ok > 0 ? `成功 ${job.ok} 篇` : '全部失败';
+  const text = `⚠ 传送结束：${tail}，失败 ${job.failed} 篇`;
+  assert.match(text, /成功 2 篇/u);
+  assert.match(text, /失败 1 篇/u);
+});
+
+test('传送状态列区分已传送 / 待传送 / 不适用', () => {
+  const cell = (sent, status) => (sent ? '✓ 已传送' : (status === 'approved' ? '待传送' : '—'));
+  assert.equal(cell(true, 'approved'), '✓ 已传送');
+  assert.equal(cell(false, 'approved'), '待传送');
+  assert.equal(cell(false, 'pending'), '—');
+});

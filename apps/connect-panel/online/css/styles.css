@@ -269,3 +269,32 @@ textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline:
 }
 .transfer-status.is-done { background: #e2f2ea; }
 .transfer-status.is-error { background: #fdf3f2; color: #a3231b; }
+
+/* 传送成功横幅 */
+.transfer-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.transfer-banner.is-ok { background: #e2f2ea; color: #14544a; border-left: 4px solid #175d52; }
+.transfer-banner.is-warn { background: #fdf3f2; color: #8f2a20; border-left: 4px solid #c7524a; }
+.banner-mark { font-size: 16px; font-weight: 700; }
+.banner-text { flex: 1; }
+.banner-close {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* 表格传送状态列 */
+.transfer-cell { white-space: nowrap; font-size: 12px; color: #6b7570; }
+.transfer-cell.is-sent { color: #175d52; font-weight: 600; }
