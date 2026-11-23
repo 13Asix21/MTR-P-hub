@@ -38,6 +38,20 @@ https://mtrp-review-workbench.app.workbuddy.host/?sharecode=R6JHCUP2WX
 - 刷新后可按页面提示恢复目录授权和当前 IndexedDB 台账。浏览器清理站点数据、隐私模式限制或 IndexedDB 错误可能造成记录不可用；页面必须提示，不能伪报已保存。
 - “清除本地台账”有两次明确确认，只删除本应用的 `dir_handle / pending_actions / export_backup`，不删除 Vault 文件、其他 Origin 数据或浏览器下载。
 
+## 在线设置 · 四库连接（云服务）
+
+页面提供「在线设置 · 我的库连接」，登录后可按账号配置 M / T / R / P 四库连接，配置保存在云端，换设备登录同一账号即可恢复。
+
+- **登录方式**：使用 WorkBuddy 登录 / 微信登录（OAuth Relay）。回调落在站点根路径。
+- **数据隔离**：表 `library_connections` 开启 RLS，策略为 `owner_id = auth.uid()`；`owner_id` 由数据库 `DEFAULT auth.uid()` 填充，前端从不发送。
+- **凭据不落云端**：面板只保存地址与标识（乐享 `space_id`、GitHub `owner/repo/branch`、Obsidian 目录与标签、可选代理地址）。填写 `token` / `secret` / `password` 等字段会被直接拒绝。
+- **各库可达性**：
+  - Obsidian（T/R）：配置只保存目录与标签；**目录读取授权仍保存在本机浏览器**，不随账号同步。
+  - GitHub（P）：公开仓库可由浏览器直连 `api.github.com` 并「测试连接」；私有仓库需填代理。
+  - 乐享（M）：浏览器直连被 CORS 拦截，必须经服务端代理（可参考 `agent-bridge` 的独立服务实现）；未填代理时状态明确显示不可用。
+- **未登录写入**会被 RLS 静默过滤，前端把"返回 0 行"当作失败并提示重新登录，不伪报成功。
+- 云服务只在正式发布域生效；`localhost` 与预览地址会被 OAuth Relay 拒绝，这属于平台边界。
+
 ## 隐私与安全
 
 1. 正文只在浏览器内读取和展示，不上传；Service Worker 不缓存 API、Vault、正文、Blob、导出内容或 IndexedDB 台账。

@@ -87,3 +87,58 @@ td { padding: 12px 14px; border-top: 1px solid var(--line); }
 textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 1000px) { .review-columns { grid-template-columns: 1fr; } .detail-panel { position: static; max-height: none; } }
 @media (max-width: 560px) { .workbench { width: calc(100% - 24px); } .stage-shell .secondary-button { margin-left: 0; } .topbar { padding: 0 16px; gap: 8px; } }
+
+/* 在线设置：四库连接配置 */
+.settings-entry { margin: 18px 0 8px; }
+.settings-host { margin-top: 14px; }
+.settings-panel {
+  border: 1px solid var(--line, #d7ded8);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--surface, #fff);
+  display: grid;
+  gap: 14px;
+}
+.settings-panel h2 { margin: 0; font-size: 20px; }
+.settings-hint { margin: 0; color: #55605a; font-size: 13px; line-height: 1.6; }
+.settings-warning {
+  border-left: 3px solid #b4690e;
+  background: #fdf6e9;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #5b4211;
+}
+.settings-card {
+  border: 1px solid var(--line, #d7ded8);
+  border-radius: 10px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+.settings-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-card-head h3 { margin: 0; font-size: 16px; }
+.settings-badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eceff0;
+  color: #5a6460;
+}
+.settings-badge.is-on { background: #e2f2ea; color: #175d52; }
+.settings-fields { display: grid; gap: 8px; }
+.settings-label { font-size: 12px; color: #4c5652; }
+.settings-status { margin: 0; font-size: 13px; color: #3f4a45; }
+.settings-error { color: #a3231b; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.settings-footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; border-top: 1px solid var(--line, #d7ded8); padding-top: 12px; }
+.settings-footer .settings-hint { flex: 1 1 100%; }
+.danger-button {
+  border: 1px solid #c7524a;
+  background: #fff;
+  color: #a3231b;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}

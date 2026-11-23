@@ -1,0 +1,170 @@
+/**
+ * 四库连接的读取与保存。
+ * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
+ * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
+ */
+import { LIBRARIES } from './cloudClient.js';
+
+export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
+export const TABLE = 'library_connections';
+
+/**
+ * token 类字段只允许留在本机，用于检测误填，不参与任何远端写入。
+ * 用正则覆盖 access_token / github_pat / client_secret 这类变体，避免逐个枚举漏网。
+ */
+const SECRET_KEY_PATTERN = /(token|secret|passw|api[_-]?key|apikey|authorization|credential|(^|[_-])pat($|[_-]))/iu;
+
+export class LibraryConfigError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'LibraryConfigError';
+    this.code = code;
+  }
+}
+
+function str(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function emptyConfig(library) {
+  if (library === 'm') return { space_id: '', proxy_url: '' };
+  if (library === 't' || library === 'r') return { vault_root: '', managed_roots: [], tags: [] };
+  if (library === 'p') return { owner: '', repo: '', branch: 'main', proxy_url: '' };
+  throw new LibraryConfigError('LIBRARY_UNKNOWN', `未知库：${library}`);
+}
+
+function listOf(value, max) {
+  if (!Array.isArray(value)) return [];
+  return value.map(str).filter(Boolean).slice(0, max);
+}
+
+/** 校验并归一化；不合格直接抛错，不静默丢弃用户输入。 */
+export function normalizeConfig(library, raw = {}) {
+  const base = emptyConfig(library);
+  const rejected = Object.keys(raw).filter((key) => SECRET_KEY_PATTERN.test(key) && str(raw[key]));
+  if (rejected.length > 0) {
+    throw new LibraryConfigError(
+      'SECRET_NOT_ALLOWED',
+      `连接配置不能包含凭据字段（${rejected.join(', ')}）。token 只应放在服务端代理或本机环境变量里。`,
+    );
+  }
+  if (library === 't' || library === 'r') {
+    const vaultRoot = str(raw.vault_root).replaceAll('\\', '/').replace(/\/+$/u, '');
+    if (vaultRoot && (vaultRoot.includes(':') || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(vaultRoot) || vaultRoot.startsWith('/') || vaultRoot.split('/').some((part) => part === '..'))) {
+      throw new LibraryConfigError('VAULT_ROOT_INVALID', '库内目录只能填相对路径，例如 2-Permanent 或留空表示整库。');
+    }
+    return {
+      ...base,
+      vault_root: vaultRoot,
+      managed_roots: listOf(raw.managed_roots, 8),
+      tags: listOf(raw.tags, 8),
+    };
+  }
+  if (library === 'm') {
+    const spaceId = str(raw.space_id);
+    const proxyUrl = str(raw.proxy_url);
+    if (proxyUrl && !/^https?:\/\//u.test(proxyUrl)) {
+      throw new LibraryConfigError('PROXY_URL_INVALID', '代理地址必须以 http:// 或 https:// 开头。');
+    }
+    return { ...base, space_id: spaceId, proxy_url: proxyUrl };
+  }
+  const owner = str(raw.owner);
+  const repo = str(raw.repo);
+  if (owner && !/^[A-Za-z0-9_.-]{1,39}$/u.test(owner)) {
+    throw new LibraryConfigError('GITHUB_OWNER_INVALID', 'GitHub 所有者名格式不正确。');
+  }
+  if (repo && !/^[A-Za-z0-9_.-]{1,100}$/u.test(repo)) {
+    throw new LibraryConfigError('GITHUB_REPO_INVALID', 'GitHub 仓库名格式不正确。');
+  }
+  const branch = str(raw.branch) || 'main';
+  if (!/^[A-Za-z0-9._\/-]{1,100}$/u.test(branch)) {
+    throw new LibraryConfigError('GITHUB_BRANCH_INVALID', '分支名格式不正确。');
+  }
+  const proxyUrl = str(raw.proxy_url);
+  if (proxyUrl && !/^https?:\/\//u.test(proxyUrl)) {
+    throw new LibraryConfigError('PROXY_URL_INVALID', '代理地址必须以 http:// 或 https:// 开头。');
+  }
+  return { ...base, owner, repo, branch, proxy_url: proxyUrl };
+}
+
+/** 数据库行 → 面板可用对象。 */
+export function rowToEntry(row) {
+  return {
+    library: row.library,
+    label: row.label ?? '',
+    enabled: row.enabled !== false,
+    config: row.config && typeof row.config === 'object' ? row.config : {},
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+export async function loadConnections(cloud) {
+  const { data, error } = await cloud.database
+    .from(TABLE)
+    .select('library, label, config, enabled, updated_at')
+    .order('library', { ascending: true });
+  if (error) {
+    throw new LibraryConfigError('LOAD_FAILED', `读取云端连接配置失败：${error.message}`);
+  }
+  const map = {};
+  for (const id of LIBRARY_IDS) map[id] = { library: id, label: '', enabled: false, config: emptyConfig(id), updatedAt: null, saved: false };
+  for (const row of data ?? []) {
+    if (!LIBRARY_IDS.includes(row.library)) continue;
+    map[row.library] = { ...rowToEntry(row), saved: true };
+  }
+  return map;
+}
+
+/** 保存单个库；owner_id 由数据库 DEFAULT auth.uid() 填充，这里绝不发送。 */
+export async function saveConnection(cloud, library, { config, label = '', enabled = true, ownerName = null }) {
+  const normalized = normalizeConfig(library, config);
+  const payload = {
+    library,
+    label: str(label),
+    config: normalized,
+    enabled: Boolean(enabled),
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await cloud.database
+    .from(TABLE)
+    .upsert({ ...payload, owner_name: ownerName ?? null }, { onConflict: 'owner_id,library' })
+    .select();
+  if (error) {
+    if (error.code === '42501') throw new LibraryConfigError('NOT_ALLOWED', '没有权限写入该配置，请确认已登录。');
+    if (error.code === '23505') throw new LibraryConfigError('DUPLICATE', '同一库已有配置，请刷新后重试。');
+    throw new LibraryConfigError('SAVE_FAILED', `保存失败：${error.message}`);
+  }
+  const affected = Array.isArray(data) ? data : [];
+  if (affected.length === 0) {
+    throw new LibraryConfigError('NOT_ALLOWED', '保存未生效：配置可能不属于当前账号，请重新登录。');
+  }
+  return rowToEntry(affected[0]);
+}
+
+export async function deleteConnection(cloud, library) {
+  const { data, error } = await cloud.database.from(TABLE).delete().eq('library', library).select();
+  if (error) throw new LibraryConfigError('DELETE_FAILED', `删除失败：${error.message}`);
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** GitHub 公开只读探活；浏览器可直连，私有仓库需要代理。 */
+export async function probeGithub(config, fetcher = globalThis.fetch) {
+  if (!config.owner || !config.repo) throw new LibraryConfigError('GITHUB_INCOMPLETE', '请先填写 owner 与 repo。');
+  const base = config.proxy_url
+    ? `${config.proxy_url.replace(/\/+$/u, '')}/repos/${config.owner}/${config.repo}`
+    : `https://api.github.com/repos/${config.owner}/${config.repo}`;
+  const response = await fetcher(base, { headers: { accept: 'application/vnd.github+json' } });
+  if (response.status === 404) throw new LibraryConfigError('GITHUB_NOT_FOUND', '仓库不存在，或为私有仓库需要代理。');
+  if (!response.ok) throw new LibraryConfigError('GITHUB_FAILED', `GitHub 返回 ${response.status}。`);
+  const body = await response.json();
+  return {
+    full_name: body.full_name ?? `${config.owner}/${config.repo}`,
+    default_branch: body.default_branch ?? '',
+    private: Boolean(body.private),
+    pushed_at: body.pushed_at ?? null,
+  };
+}
+
+export function describeLibrary(library) {
+  return LIBRARIES.find((item) => item.id === library) ?? { id: library, name: library, hint: '' };
+}

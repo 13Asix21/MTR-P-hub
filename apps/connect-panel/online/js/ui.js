@@ -170,12 +170,36 @@ export class WorkbenchUi {
       element(this.document, 'p', '审核动作和理由仅保存于当前浏览器的 IndexedDB，不是云同步；笔记正文不进入台账，也不会发起云请求。', 'privacy-note'),
       element(this.document, 'p', '本机台账未加密；浏览器配置、操作系统磁盘加密与本机访问控制不属于本应用加密。请勿将 Base64 或 SHA-256 误认为加密。', 'privacy-note'),
       element(this.document, 'p', '清理浏览器数据、隐私模式或存储空间不足可能导致台账不可用或丢失，请定期下载 JSON/CSV 导出。', 'privacy-note'),
+      this.renderSettingsEntry(),
       element(this.document, 'p', '', 'storage-warning'),
       this.notice,
     );
     main.querySelector('.storage-warning').id = 'storage-warning';
     main.querySelector('.storage-warning').setAttribute('role', 'alert');
     this.root.append(main);
+  }
+
+  renderSettingsEntry() {
+    const wrap = element(this.document, 'div', '', 'settings-entry');
+    wrap.setAttribute('aria-label', '在线设置');
+    const open = button(this.document, '在线设置 · 我的库连接', 'secondary-button', async () => {
+      const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js');
+      if (!this.settingsPanel) {
+        this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
+      }
+      this.settingsHost = element(this.document, 'div', '', 'settings-host');
+      wrap.append(this.settingsHost);
+      await this.settingsPanel.open(this.settingsHost);
+    });
+    open.id = 'open-settings';
+    wrap.append(open);
+    return wrap;
+  }
+
+  closeSettings() {
+    this.settingsHost?.replaceChildren();
+    this.settingsHost?.remove();
+    this.settingsHost = null;
   }
 
   setNotice(message) {
