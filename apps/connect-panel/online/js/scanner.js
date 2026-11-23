@@ -1,4 +1,4 @@
-import { sha256Bytes } from './hasher.js?v=20261123q';
+import { sha256Bytes } from './hasher.js?v=20261123s';
 import {
   MarkdownParseError,
   compareCodePoints,
@@ -7,7 +7,7 @@ import {
   parseDocumentSync,
   splitFrontmatter,
   splitLines,
-} from './parser.js?v=20261123q';
+} from './parser.js?v=20261123s';
 
 /**
  * 默认扫描整个 Obsidian 库根目录（`.`）。各类 Para / Zettelkasten / 扁平结构都能兼容，
@@ -23,6 +23,11 @@ export const DEFAULT_EXCLUDED_ROOTS = Object.freeze([
   '2-Permanent/Resources/MTR-P-System',
   '2-Permanent/Areas/AI-Assets/_templates',
 ]);
+/**
+ * 进入队列的文件类型：md 走完整审核；其余为「仅预览」的可读格式。
+ * 预览格式不参与标签/链接解析，也不会被标记为通过或拒绝。
+ */
+export const PREVIEW_ONLY_EXTENSIONS = Object.freeze(['pdf', 'docx', 'xlsx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
 export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_SCAN_FILES = 5000;
 
@@ -36,8 +41,8 @@ export class ScanError extends Error {
 }
 
 /** Python str.casefold 的完整 Unicode 兼容实现；普通字符走 JS lower-case。 */
-export { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123q';
-import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123q';
+export { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123s';
+import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123s';
 
 export function normalizeRoot(rawRoot, field) {
   if (typeof rawRoot !== 'string' || !rawRoot.trim()) {
@@ -71,6 +76,20 @@ export function normalizeRoots(rawRoots, field) {
     throw new ScanError('MANAGED_ROOT_REQUIRED', '至少需要一个 managed root。');
   }
   return roots;
+}
+
+export function fileExtension(name) {
+  const value = String(name ?? '').toLowerCase();
+  const index = value.lastIndexOf('.');
+  return index > 0 ? value.slice(index + 1) : '';
+}
+
+/** md = 可审核；其余可预览 = 仅预览；其他 = 忽略。 */
+export function classifyByName(name) {
+  const ext = fileExtension(name);
+  if (ext === 'md') return 'markdown';
+  if (PREVIEW_ONLY_EXTENSIONS.includes(ext)) return 'preview-node';
+  return 'ignore';
 }
 
 export function isExcluded(parts, excludedParts) {
@@ -366,7 +385,25 @@ export async function walkCollect(adapter, options = {}) {
         pending.push(parts);
         continue;
       }
-      if (entry.kind !== 'file' || !entry.name.toLowerCase().endsWith('.md')) {
+      if (entry.kind !== 'file') continue;
+      const category = classifyByName(entry.name);
+      if (category === 'ignore') continue;
+      if (category === 'preview-node') {
+        // 仅预览格式：只登记基本信息，不做正文解析与标签识别。
+        facts.push({
+          relative_posix: relative,
+          size_bytes: entry.size,
+          mtime: entry.mtime ?? '',
+          content_sha256: '',
+          tags: [],
+          classification: 'preview_only',
+          parse_status: 'PREVIEW_ONLY',
+          error_code: '',
+          error_message: '',
+          preview_kind: fileExtension(entry.name),
+          raw_bytes: new Uint8Array(),
+        });
+        scannedFiles += 1;
         continue;
       }
       if (scannedFiles >= maxScanFiles) {

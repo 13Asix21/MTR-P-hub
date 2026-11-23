@@ -1,5 +1,5 @@
-import { DEFAULT_EXCLUDED_ROOTS, isExcluded, loadFileDetail } from './scanner.js?v=20261123q';
-import { decodeUtf8Sig } from './parser.js?v=20261123q';
+import { DEFAULT_EXCLUDED_ROOTS, isExcluded, loadFileDetail } from './scanner.js?v=20261123s';
+import { decodeUtf8Sig } from './parser.js?v=20261123s';
 
 /** 浏览器适配器只返回 File 的原始字节，不接触写句柄。 */
 export function createBrowserAdapter(root) {
@@ -53,6 +53,18 @@ export async function readCurrentSha(adapter, relative, sha256Bytes) {
 
 export async function readBrowserDetail(adapter, item, relative = item.vault_relative_path) {
   const bytes = await adapter.readBytes(relative.split('/'));
+  // 仅预览格式（PDF/DOCX/XLSX/图片）不解析正文，保留 PREVIEW_ONLY 标记，
+  // 否则会被当成 Markdown 解析并按解析结果改写状态，导致审核按钮重新可用。
+  if (item.parse_status === 'PREVIEW_ONLY') {
+    return {
+      item: { ...item, sha256: '', size_bytes: bytes.length },
+      frontmatter: '',
+      body: { text: '', raw_only: true },
+      links: { out: 0, in: item.links_in ?? 0 },
+      raw_text: '',
+      preview_only: true,
+    };
+  }
   const detail = await loadFileDetail(item, bytes);
   // UI 专用原文视图；不改变供 Python 对拍的 body/frontmatter 契约。
   try { return { ...detail, raw_text: decodeUtf8Sig(bytes) }; }

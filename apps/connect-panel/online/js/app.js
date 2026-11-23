@@ -1,11 +1,11 @@
-import { createBrowserAdapter } from './browserScan.js?v=20261123q';
-import { onlineVaultId, downloadExportPair, previewExport } from './export.js?v=20261123q';
-import { isSupported, loadHandle, pickOnlyReadDirectory, requestReadPermission, storeHandle } from './fsAccess.js?v=20261123q';
-import { OfflineBuffer } from './offlineBuffer.js?v=20261123q';
-import { ReviewActionService } from './reviewActions.js?v=20261123q';
-import { scanVaultWithWorkers } from './scanWorker.js?v=20261123q';
-import { WorkbenchUi } from './ui.js?v=20261123q';
-import { transferApprovedNote } from './transfer.js?v=20261123q';
+import { createBrowserAdapter } from './browserScan.js?v=20261123s';
+import { onlineVaultId, downloadExportPair, previewExport } from './export.js?v=20261123s';
+import { isSupported, loadHandle, pickOnlyReadDirectory, requestReadPermission, storeHandle } from './fsAccess.js?v=20261123s';
+import { OfflineBuffer } from './offlineBuffer.js?v=20261123s';
+import { ReviewActionService } from './reviewActions.js?v=20261123s';
+import { scanVaultWithWorkers } from './scanWorker.js?v=20261123s';
+import { WorkbenchUi } from './ui.js?v=20261123s';
+import { transferApprovedNote } from './transfer.js?v=20261123s';
 
 /** 仅在 HTTPS 或可信回环静态源中注册，不把注册成功描述为已安装。 */
 export function registerAppShell(scope = globalThis) {

@@ -1,5 +1,5 @@
-import { compareCodePoints } from './parser.js?v=20261123q';
-import { collectListing, compactScannedFact, DEFAULT_EXCLUDED_ROOTS, DEFAULT_MANAGED_ROOTS, isExcluded, MAX_FILE_BYTES, MAX_SCAN_FILES, normalizeRoots, casefold } from './scanner.js?v=20261123q';
+import { compareCodePoints } from './parser.js?v=20261123s';
+import { classifyByName, collectListing, compactScannedFact, DEFAULT_EXCLUDED_ROOTS, DEFAULT_MANAGED_ROOTS, fileExtension, isExcluded, MAX_FILE_BYTES, MAX_SCAN_FILES, normalizeRoots, casefold } from './scanner.js?v=20261123s';
 
 // 本文件只在浏览器 Worker 或 Node 测试中执行；fileHandle 始终是只读句柄。
 const workerScope = typeof self === 'undefined' ? null : self;
@@ -7,7 +7,7 @@ if (workerScope && typeof window === 'undefined') workerScope.onmessage = async 
   const { id, fileHandle, relative, mtime, size } = event.data;
   try {
     const bytes = new Uint8Array(await (await fileHandle.getFile()).arrayBuffer());
-    const { scanFileBytes } = await import('./scanner.js?v=20261123q');
+    const { scanFileBytes } = await import('./scanner.js?v=20261123s');
     const fact = await scanFileBytes(relative, bytes, { size_bytes: size, mtime, maxFileBytes: MAX_FILE_BYTES });
     fact.raw_bytes = [];
     workerScope.postMessage({ id, fact });
@@ -59,11 +59,17 @@ async function collectEntries(root, options, onProgress) {
         continue;
       }
       if (handle.kind === 'directory') { pending.push({ parts: next, directory: handle }); continue; }
-      if (handle.kind !== 'file' || !name.toLowerCase().endsWith('.md')) continue;
+      const category = classifyByName(name);
+      if (handle.kind !== 'file' || category === 'ignore') continue;
       if (scannedFiles >= limit) { skips.push({ kind: 'limit_reached' }); pending.length = 0; break; }
       scannedFiles += 1;
       try {
         const metadata = await fileMetadata(handle);
+        if (category === 'preview-node') {
+          // 仅预览格式：不送 Worker 解析，只登记元信息。
+          entries.push({ previewOnly: true, relative: next.join('/'), previewKind: fileExtension(name), ...metadata });
+          continue;
+        }
         entries.push({ fileHandle: handle, relative: next.join('/'), ...metadata });
         if (metadata.size > maximumBytes) skips.push({ kind: 'file_too_large_metadata' });
       } catch { entries.push({ relative: next.join('/'), size: 0, mtime: '', readFailed: true }); }
@@ -87,6 +93,22 @@ export async function scanVaultWithWorkers(root, options = {}) {
         if (options.signal?.aborted) throw new DOMException('扫描已中断。', 'AbortError');
         const index = next++;
         const entry = entries[index];
+        if (entry.previewOnly) {
+          facts[index] = {
+            relative_posix: entry.relative,
+            size_bytes: entry.size,
+            mtime: entry.mtime,
+            content_sha256: '',
+            tags: [],
+            classification: 'preview_only',
+            parse_status: 'PREVIEW_ONLY',
+            error_code: '',
+            error_message: '',
+            preview_kind: entry.previewKind,
+            raw_bytes: new Uint8Array(),
+          };
+          continue;
+        }
         if (entry.readFailed) {
           facts[index] = { relative_posix: entry.relative, size_bytes: 0, mtime: '', content_sha256: '', tags: [], classification: 'unknown', parse_status: 'FILE_READ_FAILED', error_code: 'FILE_READ_FAILED', error_message: '文件读取失败。', raw_bytes: new Uint8Array() };
           continue;

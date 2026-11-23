@@ -1,8 +1,9 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123q';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123q';
-import { downloadExportPair } from './export.js?v=20261123q';
-import { renderNotePreview } from './markdownPreview.js?v=20261123q';
-import { transferApprovedNote } from './transfer.js?v=20261123q';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123s';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123s';
+import { downloadExportPair } from './export.js?v=20261123s';
+import { PREVIEW_KIND, blobUrl, describeDocx, describeXlsx, detectKind, formatSize } from './filePreview.js?v=20261123s';
+import { renderNotePreview } from './markdownPreview.js?v=20261123s';
+import { transferApprovedNote } from './transfer.js?v=20261123s';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -197,7 +198,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123q');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123s');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -217,7 +218,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123q');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123s');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -256,9 +257,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261123q');
-      const { loadConnections } = await import('./librarySettings.js?v=20261123q');
-      const { currentSession } = await import('./cloudClient.js?v=20261123q');
+      const { getCloud } = await import('./cloudClient.js?v=20261123s');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123s');
+      const { currentSession } = await import('./cloudClient.js?v=20261123s');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -516,7 +517,8 @@ export class WorkbenchUi {
       open.dataset.path = path;
       pathCell.append(open);
       const status = item.parse_status === 'FILE_TOO_LARGE' ? 'too_large' : reviewStatusFor(this.state.items[path], item.sha256);
-      const statusText = { pending: '未审', approved: '通过', rejected: '拒绝', skipped: '跳过', stale: '内容已变更', too_large: '超限不可审' }[status];
+      const statusText = { pending: '未审', approved: '通过', rejected: '拒绝', skipped: '跳过', stale: '内容已变更', too_large: '超限不可审' }[status]
+        ?? (item.parse_status === 'PREVIEW_ONLY' ? '仅预览' : status);
       // 传送状态列：让「是否已入库」一眼可见。
       const sent = this.transferredPaths.has(path);
       const transferCell = element(this.document, 'td', sent ? '✓ 已传送' : (status === 'approved' ? '待传送' : '—'), sent ? 'transfer-cell is-sent' : 'transfer-cell');
@@ -572,12 +574,22 @@ export class WorkbenchUi {
     reason.setAttribute('aria-label', '审核理由');
     reason.value = detail.decision?.reason ?? '';
     const actions = element(this.document, 'div', '', 'detail-actions');
+    const previewOnly = detail.item.parse_status === 'PREVIEW_ONLY';
     for (const [action, label, key] of [['approved', '通过 (A)', 'a'], ['rejected', '拒绝 (R)', 'r'], ['skipped', '跳过 (S)', 's'], ['undo', '撤销 (U)', 'u']]) {
       const control = button(this.document, label, 'secondary-button', () => this.performAction(action));
       control.dataset.action = action;
       control.dataset.key = key;
-      if (action === 'undo') control.disabled = !detail.decision;
+      // 仅预览格式没有 frontmatter，不参与审核，禁用以防误写台账。
+      if (previewOnly) {
+        control.disabled = true;
+        control.title = '该格式不支持审核，仅供预览';
+      } else if (action === 'undo') {
+        control.disabled = !detail.decision;
+      }
       actions.append(control);
+    }
+    if (previewOnly) {
+      actions.append(element(this.document, 'span', '仅预览格式（不参与审核）', 'preview-only-badge'));
     }
     this.detailPanel.append(reason, actions);
 
@@ -652,28 +664,34 @@ export class WorkbenchUi {
     const wrap = element(this.document, 'section', '', 'source-views');
     const bar = element(this.document, 'div', '', 'view-tabs');
     bar.setAttribute('role', 'tablist');
+    const path = detail.item.vault_relative_path ?? this.selectedPath ?? '';
+    const kind = detectKind(path);
     const rawText = detail.raw_text ?? detail.body.text ?? '';
+
     const raw = element(this.document, 'pre', rawText, 'note-source');
     raw.id = 'note-source';
     raw.tabIndex = 0;
     raw.hidden = true;
+
     const preview = element(this.document, 'div', '', 'note-preview markdown-body');
     preview.id = 'note-preview';
-    try {
-      const { frontmatterText, html } = renderNotePreview(rawText);
-      if (frontmatterText) {
-        const fm = element(this.document, 'pre', frontmatterText, 'md-frontmatter');
-        preview.append(fm);
+
+    if (kind === PREVIEW_KIND.markdown) {
+      try {
+        const { frontmatterText, html } = renderNotePreview(rawText);
+        if (frontmatterText) preview.append(element(this.document, 'pre', frontmatterText, 'md-frontmatter'));
+        preview.insertAdjacentHTML('beforeend', html);
+      } catch {
+        preview.append(element(this.document, 'p', '预览渲染失败，请查看原文。', 'notice'));
       }
-      // 内容来自本地已转义渲染器，不含用户原始 HTML。
-      preview.insertAdjacentHTML('beforeend', html);
-    } catch {
-      preview.append(element(this.document, 'p', '预览渲染失败，请查看原文。', 'notice'));
+    } else {
+      // 非 Markdown 交由异步渲染；先占位避免闪空。
+      preview.append(element(this.document, 'p', '正在解析文件…', 'notice'));
+      this.renderBinaryPreview(preview, kind, path, detail);
     }
-    const tabs = [
-      ['preview', '预览', preview],
-      ['raw', '原文', raw],
-    ];
+
+    const tabs = [['preview', '预览', preview]];
+    if (kind === PREVIEW_KIND.markdown) tabs.push(['raw', '原文', raw]);
     for (const [id, label, panel] of tabs) {
       const tab = button(this.document, label, 'view-tab', () => {
         for (const [, , other] of tabs) other.hidden = other !== panel;
@@ -684,8 +702,94 @@ export class WorkbenchUi {
       tab.dataset.view = id;
       bar.append(tab);
     }
-    wrap.append(bar, preview, raw);
+    wrap.append(bar, preview);
+    if (kind === PREVIEW_KIND.markdown) wrap.append(raw);
     return wrap;
+  }
+
+  /** 非 Markdown 文件预览：PDF/图片走浏览器原生，DOCX/XLSX 解析后重建。 */
+  async renderBinaryPreview(host, kind, path, detail) {
+    const { bytes } = await this.readFileBytes(path, detail);
+    if (!bytes || bytes.length === 0) {
+      host.replaceChildren(element(this.document, 'p', '无法读取该文件内容（可能在队列中仅登记了信息）。请点「重新选择并扫描」后再试。', 'notice'));
+      return;
+    }
+    const size = formatSize(bytes.length);
+    const title = element(this.document, 'p', `${path.split('/').pop()} · ${size}`, 'preview-file-meta');
+    host.replaceChildren(title);
+
+    if (kind === PREVIEW_KIND.pdf) {
+      const url = blobUrl(bytes, kind);
+      const frame = element(this.document, 'iframe', '', 'pdf-frame');
+      frame.src = url;
+      frame.title = 'PDF 预览';
+      host.append(frame);
+      // 切换文件后释放上一份 Blob，避免内存堆积。
+      if (this.lastPreviewUrl) URL.revokeObjectURL(this.lastPreviewUrl);
+      this.lastPreviewUrl = url;
+      return;
+    }
+
+    if (kind === PREVIEW_KIND.image) {
+      const url = blobUrl(bytes, kind);
+      const img = element(this.document, 'img', '', 'preview-image');
+      img.src = url;
+      img.alt = path;
+      host.append(img);
+      if (this.lastPreviewUrl) URL.revokeObjectURL(this.lastPreviewUrl);
+      this.lastPreviewUrl = url;
+      return;
+    }
+
+    if (kind === PREVIEW_KIND.docx) {
+      const result = await describeDocx(bytes);
+      if (!result.ok) { host.append(element(this.document, 'p', result.message, 'notice')); return; }
+      host.append(element(this.document, 'p', `共 ${result.paragraphs.length} 段 · ${result.tables} 个表格 · ${result.chars} 字`, 'preview-file-meta'));
+      const body = element(this.document, 'div', '', 'docx-preview');
+      for (const para of result.paragraphs.slice(0, 800)) body.append(element(this.document, 'p', para, 'docx-para'));
+      if (result.paragraphs.length > 800) body.append(element(this.document, 'p', `（仅显示前 800 段，共 ${result.paragraphs.length} 段）`, 'notice'));
+      host.append(body);
+      return;
+    }
+
+    if (kind === PREVIEW_KIND.xlsx) {
+      const result = await describeXlsx(bytes);
+      if (!result.ok) { host.append(element(this.document, 'p', result.message, 'notice')); return; }
+      for (const sheet of result.sheets) {
+        host.append(element(this.document, 'h4', `${sheet.name}（${sheet.rows.length} 行）`, 'sheet-title'));
+        const table = element(this.document, 'table', '', 'sheet-table');
+        const tbody = element(this.document, 'tbody');
+        const maxCols = Math.max(0, ...sheet.rows.map((r) => r.length));
+        for (const row of sheet.rows) {
+          const tr = element(this.document, 'tr');
+          for (let i = 0; i < maxCols; i += 1) tr.append(element(this.document, 'td', row[i] ?? ''));
+          tbody.append(tr);
+        }
+        table.append(tbody);
+        host.append(table);
+        if (sheet.truncated) host.append(element(this.document, 'p', '（表格较大，已截断显示）', 'notice'));
+      }
+      return;
+    }
+
+    if (kind === PREVIEW_KIND.text) {
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      host.append(element(this.document, 'pre', text.slice(0, 20000), 'note-source'));
+      return;
+    }
+
+    host.append(element(this.document, 'p', `该格式暂不支持页面内预览（${path.split('.').pop()}），可下载后本地打开。`, 'notice'));
+  }
+
+  /** 通过目录句柄现读文件字节，保证预览的是磁盘当前内容。 */
+  async readFileBytes(path, detail) {
+    try {
+      if (this.adapter?.readBytes) {
+        const bytes = await this.adapter.readBytes(path.split('/'));
+        return { bytes };
+      }
+    } catch { /* 落到下面的空结果 */ }
+    return { bytes: null };
   }
 
   describeTransferTarget() {
@@ -788,6 +892,10 @@ export class WorkbenchUi {
         detail = await this.actionService.detail(item, this.state);
       }
       if (!item || !detail || detail.item.vault_relative_path !== path) return false;
+      if (detail.item.parse_status === 'PREVIEW_ONLY') {
+        this.setNotice('该文件是仅预览格式（PDF/DOCX/XLSX 等），不支持审核，也不会进入 M 库。');
+        return false;
+      }
       if (['FILE_READ_FAILED', 'FILE_TOO_LARGE', 'INVALID_ENCODING'].includes(detail.item.parse_status)) {
         this.setNotice('该篇没有可核验的有效原始字节，不能审核；请修复或重新扫描可读文件。');
         return false;
