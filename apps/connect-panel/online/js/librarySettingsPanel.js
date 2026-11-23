@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123p';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123q';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -12,8 +12,8 @@ import {
   normalizeConfig,
   saveConnection,
   testConnection,
-} from './librarySettings.js?v=20261123p';
-import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123p';
+} from './librarySettings.js?v=20261123q';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, extractSpaceId, toFormValues } from './libraryFields.js?v=20261123q';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -331,6 +331,37 @@ export class LibrarySettingsPanel {
     }
   }
 
+  renderSpaceIdPaster() {
+    const box = el(this.document, 'details', '', 'settings-paster');
+    box.append(el(this.document, 'summary', '不知道知识库 ID？粘贴链接自动识别'));
+    const row = el(this.document, 'div', '', 'settings-paster-row');
+    const input = el(this.document, 'input', '', 'text-input');
+    input.id = 'm-space-link';
+    input.spellcheck = false;
+    input.placeholder = '粘贴乐享知识库页面地址，例如 https://lexiang.tencent.com/space/xxxx';
+    const apply = button(this.document, '识别并填入', 'secondary-button', () => {
+      const { id, error } = extractSpaceId(input.value);
+      const target = this.root.querySelector('#lib-m-space_id');
+      if (error) {
+        msg.textContent = error;
+        msg.className = 'field-help settings-error';
+        return;
+      }
+      if (target) {
+        target.value = id;
+        this.forms.m.space_id = id;
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      msg.textContent = `已识别：${id}`;
+      msg.className = 'field-help settings-ok';
+    });
+    const msg = el(this.document, 'p', '', 'field-help');
+    row.append(input, apply);
+    box.append(row, msg);
+    box.append(el(this.document, 'p', '打开乐享知识库后，浏览器地址栏里的那串 32 位字符就是 ID。也可以直接粘贴 ID 本身。', 'field-help'));
+    return box;
+  }
+
   renderCard(library) {
     const entry = this.entries[library.id];
     const card = el(this.document, 'section', '', 'settings-card');
@@ -347,6 +378,8 @@ export class LibrarySettingsPanel {
     const fields = el(this.document, 'div', '', 'settings-fields');
     for (const field of FIELD_HELP[library.id] ?? []) fields.append(this.renderField(library.id, field));
     card.append(fields);
+    // 乐享：支持直接粘贴知识库链接自动识别 ID，避免手抄 32 位字符串出错。
+    if (library.id === 'm') card.append(this.renderSpaceIdPaster());
 
     const advancedFields = ADVANCED_FIELDS[library.id] ?? [];
     if (advancedFields.length > 0) {
@@ -499,7 +532,7 @@ export class LibrarySettingsPanel {
     if (btn) btn.disabled = true;
     host.hidden = false;
     host.replaceChildren();
-    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123p');
+    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123q');
     const results = [];
     const render = () => {
       host.replaceChildren();
@@ -519,7 +552,7 @@ export class LibrarySettingsPanel {
       try {
         if (step.id === 'm') {
           entry.message = checkM(this.entries.m?.config).message;
-          const { testConnection } = await import('./librarySettings.js?v=20261123p');
+          const { testConnection } = await import('./librarySettings.js?v=20261123q');
           const r = await testConnection('m', this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
@@ -532,7 +565,7 @@ export class LibrarySettingsPanel {
           const cfg = this.entries.p?.config;
           const chk = checkGithub(cfg);
           if (chk.state === STEP_STATE.ok) {
-            const { checkGithubAccess } = await import('./librarySettings.js?v=20261123p');
+            const { checkGithubAccess } = await import('./librarySettings.js?v=20261123q');
             const r = await checkGithubAccess(cfg);
             entry.message = r.message;
             if (!r.writable) entry.state = STEP_STATE.ok;
@@ -541,7 +574,7 @@ export class LibrarySettingsPanel {
           }
           entry.state = chk.state;
         } else {
-          const { testAgent } = await import('./librarySettings.js?v=20261123p');
+          const { testAgent } = await import('./librarySettings.js?v=20261123q');
           const r = await testAgent(this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;

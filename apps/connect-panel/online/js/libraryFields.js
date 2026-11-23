@@ -223,3 +223,25 @@ export function defaultsFor(library) {
   }
   return values;
 }
+
+/**
+ * 从乐享知识库链接里提取 space_id。
+ * 乐享页面地址形如 https://<域名>/space/<32位ID> 或带 space_id= 参数；
+ * 直接粘贴 32 位十六进制串也接受。
+ */
+export function extractSpaceId(input) {
+  const text = String(input ?? '').trim();
+  if (!text) return { id: '', error: '请粘贴知识库链接或 ID。' };
+  // 纯 ID
+  if (/^[0-9a-f]{32}$/i.test(text)) return { id: text.toLowerCase(), error: '' };
+  // 查询参数
+  const byQuery = text.match(/[?&](?:space_?id|spaceId)=([0-9a-f]{32})/i);
+  if (byQuery) return { id: byQuery[1].toLowerCase(), error: '' };
+  // 路径 /space/<id>、/kb/<id> 等
+  const byPath = text.match(/\/(?:space|kb|knowledgebase)\/([0-9a-f]{32})/i);
+  if (byPath) return { id: byPath[1].toLowerCase(), error: '' };
+  // 兜底：链接里任意 32 位十六进制串
+  const any = text.match(/[0-9a-f]{32}/i);
+  if (any) return { id: any[0].toLowerCase(), error: '' };
+  return { id: '', error: '没能从这段内容里识别出 32 位知识库 ID，请确认复制的是知识库页面链接。' };
+}

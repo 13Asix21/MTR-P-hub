@@ -308,3 +308,9 @@ textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline:
   opacity: 1;
 }
 .batch-transfer-hint { font-size: 12px; color: #6b7570; align-self: center; }
+
+/* 知识库 ID 识别助手 */
+.settings-paster { border-top: 1px dashed var(--line, #d7ded8); padding-top: 8px; }
+.settings-paster summary { cursor: pointer; font-size: 13px; color: #175d52; }
+.settings-paster-row { display: flex; gap: 8px; margin-top: 8px; }
+.settings-paster-row .text-input { flex: 1; }

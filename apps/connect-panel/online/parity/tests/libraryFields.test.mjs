@@ -60,3 +60,23 @@ test('T/R 没有高级字段，界面不会出现空折叠', () => {
   assert.equal(ADVANCED_FIELDS.t.length, 0);
   assert.equal(ADVANCED_FIELDS.r.length, 0);
 });
+
+import { extractSpaceId } from '../../js/libraryFields.js';
+
+test('从乐享知识库链接识别 32 位空间 ID', () => {
+  const id = 'bda1340e5541477d9698d82dc9a4b451';
+  assert.equal(extractSpaceId(`https://lexiang.tencent.com/space/${id}`).id, id);
+  assert.equal(extractSpaceId(`https://x.com/kb/${id}?tab=1`).id, id);
+  assert.equal(extractSpaceId(`https://x.com/page?space_id=${id}`).id, id);
+  assert.equal(extractSpaceId(id).id, id);
+  assert.equal(extractSpaceId(`  ${id.toUpperCase()}  `).id, id, '大写应归一为小写');
+});
+
+test('无法识别时给出明确提示，不返回空串冒充成功', () => {
+  const r = extractSpaceId('这一段没有 ID');
+  assert.equal(r.id, '');
+  assert.match(r.error, /没能/u);
+  const empty = extractSpaceId('');
+  assert.equal(empty.id, '');
+  assert.match(empty.error, /请粘贴/u);
+});

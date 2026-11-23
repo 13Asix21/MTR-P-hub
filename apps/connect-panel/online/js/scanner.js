@@ -1,4 +1,4 @@
-import { sha256Bytes } from './hasher.js?v=20261123p';
+import { sha256Bytes } from './hasher.js?v=20261123q';
 import {
   MarkdownParseError,
   compareCodePoints,
@@ -7,7 +7,7 @@ import {
   parseDocumentSync,
   splitFrontmatter,
   splitLines,
-} from './parser.js?v=20261123p';
+} from './parser.js?v=20261123q';
 
 /**
  * 默认扫描整个 Obsidian 库根目录（`.`）。各类 Para / Zettelkasten / 扁平结构都能兼容，
@@ -36,8 +36,8 @@ export class ScanError extends Error {
 }
 
 /** Python str.casefold 的完整 Unicode 兼容实现；普通字符走 JS lower-case。 */
-export { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123p';
-import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123p';
+export { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123q';
+import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261123q';
 
 export function normalizeRoot(rawRoot, field) {
   if (typeof rawRoot !== 'string' || !rawRoot.trim()) {
