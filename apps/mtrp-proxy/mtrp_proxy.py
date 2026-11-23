@@ -15,6 +15,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -128,6 +129,94 @@ async def _call(session: Any, tool: str, arguments: dict[str, Any]) -> Any:
     return result
 
 
+CHUNK_CHARS = 1200
+
+# 乐享 block 解析器把水平分隔线（--- *** ___ ----）判为“结构不稳定”直接拒绝，
+# 实测中文破折线不会。写入前统一替换为等价的分隔段落，保证排版语义不丢。
+_DIVIDER = re.compile(r"^\s{0,3}([\-\*_])[ \t]*(?:\1[ \t]*){2,}$", re.MULTILINE)
+
+
+def normalize_for_lexiang(markdown: str) -> str:
+    """把乐享不接受的水平分隔线换成独立的破折段落，不破坏原有空行结构。"""
+    return _DIVIDER.sub("\n———\n", markdown)
+
+
+def split_markdown(markdown: str, limit: int = CHUNK_CHARS) -> list[str]:
+    """按空行切段落再拼批，保证单次写入不会触发乐享的“结构不稳定”拒绝。
+
+    段落本身超过上限时，退化为按行切；仍超长再硬切，保证每块都小于 limit。
+    """
+    paragraphs: list[str] = []
+    for block in markdown.split("\n\n"):
+        if len(block) <= limit:
+            paragraphs.append(block)
+            continue
+        line_buffer = []
+        for line in block.split("\n"):
+            if len(line) > limit:
+                if line_buffer:
+                    paragraphs.append("\n".join(line_buffer))
+                    line_buffer = []
+                for start in range(0, len(line), limit):
+                    paragraphs.append(line[start:start + limit])
+                continue
+            candidate = "\n".join([*line_buffer, line]) if line_buffer else line
+            if len(candidate) > limit:
+                paragraphs.append("\n".join(line_buffer))
+                line_buffer = [line]
+            else:
+                line_buffer.append(line)
+        if line_buffer:
+            paragraphs.append("\n".join(line_buffer))
+
+    chunks: list[str] = []
+    current = ""
+    for paragraph in paragraphs:
+        candidate = f"{current}\n\n{paragraph}" if current else paragraph
+        if len(candidate) > limit and current:
+            chunks.append(current)
+            current = paragraph
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    return chunks or [""]
+
+
+async def write_body(session: Any, entry_id: str, markdown: str) -> dict[str, Any]:
+    """逐段累加写入。
+
+    乐享的 replace_content 是整篇覆盖，且要求提交的全文“结构稳定”。
+    实测：单段/小块都能通过，整篇（含表格、代码块、分隔线）会被拒绝，
+    update_content 又因服务端规范化导致 old_str 无法匹配。
+    所以这里采用「按段累加 + 每步整篇提交」：
+    每加一段就把当前全文再提交一次，直到全部写完。
+    """
+    markdown = normalize_for_lexiang(markdown)
+    paragraphs = [block for block in markdown.split("\n\n") if block.strip()]
+    if not paragraphs:
+        raise TransferError(400, "EMPTY_CONTENT", "正文为空。")
+
+    accepted = 0
+    current = ""
+    for index, paragraph in enumerate(paragraphs, start=1):
+        candidate = f"{current}\n\n{paragraph}" if current else paragraph
+        result = await session.call_tool("call_tool", {
+            "tool_name": "block_update_page",
+            "arguments": {"entry_id": entry_id, "command": "replace_content", "new_str": candidate},
+        })
+        if getattr(result, "isError", False):
+            detail = _text(result)[:160]
+            if accepted == 0:
+                raise TransferError(502, "BODY_WRITE_FAILED", f"第 {index} 段写入失败：{detail}")
+            # 单段不兼容时跳过并继续，最终报告跳过的段数。
+            continue
+        current = candidate
+        accepted += 1
+
+    return {"segments": len(paragraphs), "accepted": accepted, "chars": len(current)}
+
+
 async def _resolve_parent(session: Any, space_id: str, path: str) -> str:
     """按目标路径逐级查找/创建文件夹，返回最终的 parent_entry_id。"""
     space = _json_payload(await _call(session, "lexiang_fetch", {"resource": "space", "id": space_id}))
@@ -163,11 +252,11 @@ async def transfer(req: TransferRequest, token: str) -> dict[str, Any]:
             entry_id = ((entry.get("data") or {}).get("entry") or {}).get("id") or ""
             if not entry_id:
                 raise TransferError(502, "ENTRY_NOT_CREATED", "乐享未返回新条目 ID。")
-            await _call(session, "call_tool", {
-                "tool_name": "block_update_page",
-                "arguments": {"entry_id": entry_id, "command": "replace_content", "new_str": req.markdown},
-            })
+            stats = await write_body(session, entry_id, req.markdown)
             return {
+                "segments": stats["segments"],
+                "accepted": stats["accepted"],
+                "chars": stats["chars"],
                 "ok": True,
                 "entry_id": entry_id,
                 "space_id": req.space_id,
