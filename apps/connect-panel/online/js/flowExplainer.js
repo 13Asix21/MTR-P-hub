@@ -2,7 +2,7 @@
  * 流转说明页：讲清「审核通过 → 传送到哪个库的哪条路径」，
  * 以及「拒绝了什么、留在哪里、后续怎么用」。
  */
-import { describeLibrary } from './librarySettings.js?v=20261123o';
+import { describeLibrary } from './librarySettings.js?v=20261123p';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);

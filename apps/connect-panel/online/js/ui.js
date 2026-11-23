@@ -1,8 +1,8 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123o';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123o';
-import { downloadExportPair } from './export.js?v=20261123o';
-import { renderNotePreview } from './markdownPreview.js?v=20261123o';
-import { transferApprovedNote } from './transfer.js?v=20261123o';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123p';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123p';
+import { downloadExportPair } from './export.js?v=20261123p';
+import { renderNotePreview } from './markdownPreview.js?v=20261123p';
+import { transferApprovedNote } from './transfer.js?v=20261123p';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -197,7 +197,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123o');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123p');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -217,7 +217,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123o');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123p');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -256,9 +256,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261123o');
-      const { loadConnections } = await import('./librarySettings.js?v=20261123o');
-      const { currentSession } = await import('./cloudClient.js?v=20261123o');
+      const { getCloud } = await import('./cloudClient.js?v=20261123p');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123p');
+      const { currentSession } = await import('./cloudClient.js?v=20261123p');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -470,11 +470,15 @@ export class WorkbenchUi {
       control.dataset.batchAction = action;
       bar.append(control);
     }
-    // 批量通过后一次性把已通过项送到 M 库，省去逐篇点传送。
+    // 批量传送到 M 库：状态随「是否有可传送项 / 配置是否齐全」变化。
     const send = button(this.document, '批量传送到 M 库', 'primary-button', () => this.batchTransfer());
     send.id = 'batch-transfer';
-    bar.append(send);
+    const hint = element(this.document, 'span', '', 'batch-transfer-hint');
+    hint.id = 'batch-transfer-hint';
+    bar.append(send, hint);
     bar.prepend(all, count);
+    // 渲染后同步启用态，避免按钮看起来可点但点了没反应。
+    queueMicrotask(() => this.syncBatchTransferButton());
     return bar;
   }
 
@@ -707,11 +711,13 @@ export class WorkbenchUi {
         this.transferConfigLoaded = true;
         this.refreshDecisionFlow();
         this.syncTransferButton();
+        this.syncBatchTransferButton();
       })
       .catch(() => {
         this.transferConfigLoaded = true;
         this.refreshDecisionFlow();
         this.syncTransferButton();
+        this.syncBatchTransferButton();
       });
     return this.transferConfigPromise;
   }
@@ -749,6 +755,7 @@ export class WorkbenchUi {
       // 单篇也给出明确成功反馈，并刷新表格里的「已传送」标记。
       this.showTransferBanner(1);
       this.renderItems();
+      this.syncBatchTransferButton();
     } catch (error) {
       if (node) {
         node.textContent = error?.message ?? '传送失败。';
@@ -831,18 +838,58 @@ export class WorkbenchUi {
         const hint = action === 'approved' && passed > 0 ? `　已通过 ${passed} 篇，可点「批量传送到 M 库」写入乐享。` : '';
         this.setNotice(`批量完成 ${passed} 篇，未处理 ${result.failures.length} 篇。冲突及失败项仍保留，已读队列未清空。${hint}${result.failures.map((failure) => `${failure.path}: ${failure.code}`).join('；')}`);
         this.updateTransferStatus();
+        this.syncBatchTransferButton();
       } catch (error) { this.setNotice(errorMessage(error)); }
       finally { this.actionBusy = false; }
     });
   }
 
-  /** 批量传送：把当前筛选内已通过、且尚未传送的笔记逐篇送到 M 库。 */
-  async batchTransfer() {
-    if (this.actionBusy) return;
-    const approved = this.listing.items
+  /** 待传送清单：已通过且尚未传送过的笔记路径。 */
+  pendingTransferPaths() {
+    return (this.listing?.items ?? [])
       .filter((item) => this.state.items?.[item.vault_relative_path]?.action === 'approved')
       .filter((item) => !this.transferredPaths.has(item.vault_relative_path))
       .map((item) => item.vault_relative_path);
+  }
+
+  /** 同步「批量传送到 M 库」按钮：无可传送项或配置不全时置灰并说明原因。 */
+  syncBatchTransferButton() {
+    const send = this.root.querySelector('#batch-transfer');
+    const hint = this.root.querySelector('#batch-transfer-hint');
+    if (!send) return;
+    const pending = this.pendingTransferPaths();
+    const configured = this.canTransfer();
+    const approvedTotal = (this.listing?.items ?? [])
+      .filter((item) => this.state.items?.[item.vault_relative_path]?.action === 'approved').length;
+
+    if (!configured) {
+      send.disabled = true;
+      send.textContent = '批量传送到 M 库';
+      if (hint) hint.textContent = '未配置 M 库传送，请在「⚙ 库设置」补齐并测试连接';
+      return;
+    }
+    if (approvedTotal > 0 && pending.length === 0) {
+      // 全部送完：按钮置灰，明确表达「无需再传」。
+      send.disabled = true;
+      send.textContent = '已全部传送到 M 库';
+      if (hint) hint.textContent = `${approvedTotal} 篇均已传送`;
+      return;
+    }
+    if (pending.length === 0) {
+      send.disabled = true;
+      send.textContent = '批量传送到 M 库';
+      if (hint) hint.textContent = '请先批量通过，再点此传送';
+      return;
+    }
+    send.disabled = false;
+    send.textContent = `批量传送到 M 库（${pending.length}）`;
+    if (hint) hint.textContent = '';
+  }
+
+  /** 批量传送：把当前筛选内已通过、且尚未传送的笔记逐篇送到 M 库。 */
+  async batchTransfer() {
+    if (this.actionBusy) return;
+    const approved = this.pendingTransferPaths();
     if (approved.length === 0) {
       this.setNotice('当前没有「已通过且尚未传送」的笔记。请先批量通过，或检查是否已全部传送过。');
       return;
@@ -880,6 +927,7 @@ export class WorkbenchUi {
         this.renderWorkbench();
         // renderWorkbench 会重建工具栏，状态栏需在重建后重新填充。
         this.updateTransferStatus();
+        this.syncBatchTransferButton();
         if (job.ok > 0) this.showTransferBanner(job.ok, job.failed ? [job.lastError] : []);
       }
     });

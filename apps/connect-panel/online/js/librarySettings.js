@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js?v=20261123o';
+import { LIBRARIES } from './cloudClient.js?v=20261123p';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
