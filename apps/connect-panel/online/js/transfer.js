@@ -4,7 +4,7 @@
  * 浏览器无法直连乐享 MCP（CORS 被拦），所以必须经用户配置的服务端代理。
  * 这里只发「标题 + 正文 + 目标」的最小载荷；不发 token，代理自己持有凭据。
  */
-import { LibraryConfigError } from './librarySettings.js?v=20261123k';
+import { LibraryConfigError } from './librarySettings.js?v=20261123l';
 
 export const TRANSFER_PATH = '/mtrp/transfer';
 
@@ -87,16 +87,18 @@ export async function transferApprovedNote({ path, detail, library, session }, f
     throw new LibraryConfigError('TRANSFER_REJECTED', payload.message ?? '代理拒绝了这次传送。');
   }
   const target = library.path ? `/${String(library.path).replace(/^\/+/u, '')}` : '知识库根目录';
-  const segments = payload?.segments ?? null;
-  const accepted = payload?.accepted ?? null;
-  const partial = segments !== null && accepted !== null && accepted < segments;
-  const warning = partial ? `（注意：${segments} 段中仅 ${accepted} 段被乐享接受，超出其单篇容量上限，建议拆分后再传）` : '';
+  // 整篇原样导入：乐享返回保存的字节数，可据此确认没有截断。
+  const bytes = payload?.bytes ?? null;
+  const renamed = payload?.renamed;
+  const sizeText = bytes ? `，${bytes} 字节` : '';
+  const nameText = renamed === false ? '（标题改名未生效，内容已保存）' : '';
+  const warn = payload?.warning ? `　注意：${payload.warning}` : '';
   return {
     ok: true,
-    partial,
     entryId: payload?.entry_id ?? null,
+    bytes,
     message: payload?.entry_id
-      ? `已传送到 M 库：空间 ${library.space_id} · ${target}（条目 ${payload.entry_id}）${warning}`
-      : `已传送到 M 库：空间 ${library.space_id} · ${target}。${warning}`,
+      ? `已整篇传入 M 库：空间 ${library.space_id} · ${target}（条目 ${payload.entry_id}${sizeText}）${nameText}${warn}`
+      : `已整篇传入 M 库：空间 ${library.space_id} · ${target}。`,
   };
 }

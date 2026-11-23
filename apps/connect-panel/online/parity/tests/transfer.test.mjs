@@ -114,3 +114,23 @@ test('403 明确提示 sharecode 失效', async () => {
     (e) => e.code === 'SHARECODE_REJECTED',
   );
 });
+
+test('整篇导入：用字节数确认未截断，并说明改名结果', async () => {
+  const fetcher = async () => ({ ok: true, json: async () => ({ ok: true, entry_id: 'e1', bytes: 16838, renamed: true }) });
+  const r = await transferApprovedNote({ path: 'a/b.md', detail: detail(), library, session }, fetcher);
+  assert.match(r.message, /已整篇传入/u);
+  assert.equal(r.bytes, 16838);
+  assert.match(r.message, /16838 字节/u);
+});
+
+test('改名未生效时如实提示，不宣称成功改名', async () => {
+  const fetcher = async () => ({ ok: true, json: async () => ({ ok: true, entry_id: 'e2', bytes: 900, renamed: false }) });
+  const r = await transferApprovedNote({ path: 'a.md', detail: detail(), library, session }, fetcher);
+  assert.match(r.message, /标题改名未生效/u);
+});
+
+test('代理返回警告时一并透出', async () => {
+  const fetcher = async () => ({ ok: true, json: async () => ({ ok: true, entry_id: 'e3', bytes: 10, renamed: true, warning: '权限不足' }) });
+  const r = await transferApprovedNote({ path: 'a.md', detail: detail(), library, session }, fetcher);
+  assert.match(r.message, /权限不足/u);
+});

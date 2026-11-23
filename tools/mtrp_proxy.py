@@ -129,92 +129,41 @@ async def _call(session: Any, tool: str, arguments: dict[str, Any]) -> Any:
     return result
 
 
-CHUNK_CHARS = 1200
-
-# 乐享 block 解析器把水平分隔线（--- *** ___ ----）判为“结构不稳定”直接拒绝，
-# 实测中文破折线不会。写入前统一替换为等价的分隔段落，保证排版语义不丢。
-_DIVIDER = re.compile(r"^\s{0,3}([\-\*_])[ \t]*(?:\1[ \t]*){2,}$", re.MULTILINE)
+# 乐享整篇导入上限：file_import_markdown 支持 2 MiB，原样保存、不经 block 转换。
+MAX_IMPORT_BYTES = 2 * 1024 * 1024
 
 
-def normalize_for_lexiang(markdown: str) -> str:
-    """把乐享不接受的水平分隔线换成独立的破折段落，不破坏原有空行结构。"""
-    return _DIVIDER.sub("\n———\n", markdown)
+async def import_markdown(session: Any, parent_id: str, content: str, title: str) -> dict[str, Any]:
+    """整篇导入 Markdown 文件（不转 block），随后重命名。
 
-
-def split_markdown(markdown: str, limit: int = CHUNK_CHARS) -> list[str]:
-    """按空行切段落再拼批，保证单次写入不会触发乐享的“结构不稳定”拒绝。
-
-    段落本身超过上限时，退化为按行切；仍超长再硬切，保证每块都小于 limit。
+    这是乐享官方给“整文件入库”的通道：服务端完成上传与提交，内容原样保存，
+    实测 16KB 文件导入后逐字节一致，不受 block 解析的结构稳定性限制。
     """
-    paragraphs: list[str] = []
-    for block in markdown.split("\n\n"):
-        if len(block) <= limit:
-            paragraphs.append(block)
-            continue
-        line_buffer = []
-        for line in block.split("\n"):
-            if len(line) > limit:
-                if line_buffer:
-                    paragraphs.append("\n".join(line_buffer))
-                    line_buffer = []
-                for start in range(0, len(line), limit):
-                    paragraphs.append(line[start:start + limit])
-                continue
-            candidate = "\n".join([*line_buffer, line]) if line_buffer else line
-            if len(candidate) > limit:
-                paragraphs.append("\n".join(line_buffer))
-                line_buffer = [line]
-            else:
-                line_buffer.append(line)
-        if line_buffer:
-            paragraphs.append("\n".join(line_buffer))
+    size = len(content.encode("utf-8"))
+    if size > MAX_IMPORT_BYTES:
+        raise TransferError(
+            413, "FILE_TOO_LARGE",
+            f"文件 {size // 1024} KB 超过乐享单文件 {MAX_IMPORT_BYTES // 1024 // 1024} MiB 上限。",
+        )
+    result = await session.call_tool("call_tool", {
+        "tool_name": "file_import_markdown",
+        "arguments": {"parent_entry_id": parent_id, "content": content},
+    })
+    if getattr(result, "isError", False):
+        raise TransferError(502, "IMPORT_FAILED", f"导入失败：{_text(result)[:200]}")
+    entry = ((_json_payload(result).get("data") or {}).get("entry") or {})
+    entry_id = entry.get("id") or ""
+    if not entry_id:
+        raise TransferError(502, "ENTRY_NOT_CREATED", "乐享未返回条目 ID。")
 
-    chunks: list[str] = []
-    current = ""
-    for paragraph in paragraphs:
-        candidate = f"{current}\n\n{paragraph}" if current else paragraph
-        if len(candidate) > limit and current:
-            chunks.append(current)
-            current = paragraph
-        else:
-            current = candidate
-    if current:
-        chunks.append(current)
-    return chunks or [""]
-
-
-async def write_body(session: Any, entry_id: str, markdown: str) -> dict[str, Any]:
-    """逐段累加写入。
-
-    乐享的 replace_content 是整篇覆盖，且要求提交的全文“结构稳定”。
-    实测：单段/小块都能通过，整篇（含表格、代码块、分隔线）会被拒绝，
-    update_content 又因服务端规范化导致 old_str 无法匹配。
-    所以这里采用「按段累加 + 每步整篇提交」：
-    每加一段就把当前全文再提交一次，直到全部写完。
-    """
-    markdown = normalize_for_lexiang(markdown)
-    paragraphs = [block for block in markdown.split("\n\n") if block.strip()]
-    if not paragraphs:
-        raise TransferError(400, "EMPTY_CONTENT", "正文为空。")
-
-    accepted = 0
-    current = ""
-    for index, paragraph in enumerate(paragraphs, start=1):
-        candidate = f"{current}\n\n{paragraph}" if current else paragraph
-        result = await session.call_tool("call_tool", {
-            "tool_name": "block_update_page",
-            "arguments": {"entry_id": entry_id, "command": "replace_content", "new_str": candidate},
-        })
-        if getattr(result, "isError", False):
-            detail = _text(result)[:160]
-            if accepted == 0:
-                raise TransferError(502, "BODY_WRITE_FAILED", f"第 {index} 段写入失败：{detail}")
-            # 单段不兼容时跳过并继续，最终报告跳过的段数。
-            continue
-        current = candidate
-        accepted += 1
-
-    return {"segments": len(paragraphs), "accepted": accepted, "chars": len(current)}
+    renamed = await session.call_tool("call_tool", {
+        "tool_name": "entry_rename_entry",
+        "arguments": {"entry_id": entry_id, "name": title},
+    })
+    if getattr(renamed, "isError", False):
+        # 改名失败不影响内容，但要如实告知。
+        return {"entry_id": entry_id, "bytes": size, "renamed": False, "warning": _text(renamed)[:120]}
+    return {"entry_id": entry_id, "bytes": size, "renamed": True}
 
 
 async def _resolve_parent(session: Any, space_id: str, path: str) -> str:
@@ -234,7 +183,7 @@ async def _resolve_parent(session: Any, space_id: str, path: str) -> str:
 
 
 async def transfer(req: TransferRequest, token: str) -> dict[str, Any]:
-    """创建页面条目并写入正文，返回 entry_id。"""
+    """整篇导入：按目标路径定位父节点，导入原始 Markdown 文件并重命名。"""
     from mcp import ClientSession
 
     auth = {"Authorization": f"Bearer {token}"}
@@ -245,27 +194,19 @@ async def transfer(req: TransferRequest, token: str) -> dict[str, Any]:
         async with ClientSession(read, write) as session:
             await session.initialize()
             parent = await _resolve_parent(session, req.space_id, req.path)
-            entry = _json_payload(await _call(session, "call_tool", {
-                "tool_name": "entry_create_entry",
-                "arguments": {"entry_type": "page", "parent_entry_id": parent, "name": req.title},
-            }))
-            entry_id = ((entry.get("data") or {}).get("entry") or {}).get("id") or ""
-            if not entry_id:
-                raise TransferError(502, "ENTRY_NOT_CREATED", "乐享未返回新条目 ID。")
-            stats = await write_body(session, entry_id, req.markdown)
+            imported = await import_markdown(session, parent, req.markdown, req.title)
             return {
-                "segments": stats["segments"],
-                "accepted": stats["accepted"],
-                "chars": stats["chars"],
                 "ok": True,
-                "entry_id": entry_id,
+                "entry_id": imported["entry_id"],
+                "bytes": imported["bytes"],
+                "renamed": imported["renamed"],
+                "warning": imported.get("warning"),
                 "space_id": req.space_id,
                 "path": req.path,
                 "source_path": req.source_path,
                 "content_sha256": req.content_sha256,
-                "url": f"https://mcp.lexiang-app.com/pages/{entry_id}",
+                "url": f"https://mcp.lexiang-app.com/pages/{imported['entry_id']}",
             }
-
 
 
 def _select_opener(auth: dict[str, str]):
