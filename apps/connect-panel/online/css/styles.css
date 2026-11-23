@@ -245,3 +245,13 @@ textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline:
 .settings-advanced .settings-field { margin-top: 8px; }
 .settings-result { margin: 0; font-size: 13px; min-height: 1em; }
 .settings-result.settings-ok { color: #175d52; }
+
+/* 联通自检报告 */
+.workflow-report { flex: 1 1 100%; display: grid; gap: 6px; margin: 10px 0 4px; }
+.wf-line { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.6; }
+.wf-mark { width: 16px; flex: none; text-align: center; font-weight: 700; }
+.wf-line.is-ok .wf-mark { color: #175d52; }
+.wf-line.is-failed .wf-mark { color: #a3231b; }
+.wf-line.is-skipped .wf-mark { color: #8b9490; }
+.wf-line.is-running .wf-mark { color: #b4690e; }
+.wf-line.is-failed .wf-text { color: #a3231b; }

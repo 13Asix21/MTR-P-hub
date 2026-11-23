@@ -251,6 +251,40 @@ async def verify(token: str, space_id: str, target_path: str) -> dict[str, Any]:
             }
 
 
+def agent_check() -> dict[str, Any]:
+    """真实调用一次 Agent 网关，确认 key 与端点可用（只发最短请求）。"""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    endpoint = os.environ.get("MTRP_AGENT_ENDPOINT", "https://token.moi.matrixorigin.cn/v1").rstrip("/")
+    key = os.environ.get("MTRP_AGENT_KEY", "").strip()
+    model = os.environ.get("MTRP_AGENT_MODEL", "deepseek-v4.1-flash")
+    if not key:
+        raise TransferError(503, "AGENT_KEY_MISSING", "服务端未配置 Agent key。")
+    payload = _json.dumps({
+        "model": model,
+        "messages": [{"role": "user", "content": "回复 ok"}],
+        "max_tokens": 8,
+        "stream": False,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        f"{endpoint}/chat/completions",
+        data=payload,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = _json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        raise TransferError(502, "AGENT_REJECTED", f"Agent 网关返回 {error.code}。") from None
+    except Exception as error:
+        raise TransferError(502, "AGENT_UNREACHABLE", f"Agent 网关不可达：{str(error)[:80]}") from None
+    model_used = body.get("model") or model
+    return {"ok": True, "model": model_used, "message": f"Agent 可用：{model_used}"}
+
+
 class Handler(BaseHTTPRequestHandler):
     """最小 HTTP 处理器：健康检查、CORS 预检、传送。"""
 
@@ -302,6 +336,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
             except Exception as error:  # pragma: no cover
                 self._send(502, {"ok": False, "code": "UPSTREAM_FAILED", "message": str(error)[:200]})
+            return
+        if self._route() == "/mtrp/agent-check":
+            try:
+                self._send(200, agent_check())
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
+            except Exception as error:  # pragma: no cover
+                self._send(502, {"ok": False, "code": "AGENT_FAILED", "message": str(error)[:200]})
             return
         if self._route() == "/mtrp/health":
             self._send(200, {"ok": True, "token_configured": bool(os.environ.get("MTRP_LEXIANG_TOKEN"))})

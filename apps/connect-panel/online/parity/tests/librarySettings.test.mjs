@@ -15,7 +15,7 @@ import {
 
 test('四库 ID 与空配置齐全', () => {
   assert.deepEqual(LIBRARY_IDS, ['m', 't', 'r', 'p']);
-  assert.deepEqual(emptyConfig('t'), { vault_root: '', managed_roots: [], tags: [] });
+  assert.deepEqual(emptyConfig('t'), { mode: 'local', vault_root: '', mcp_endpoint: '', managed_roots: [], tags: [] });
   assert.deepEqual(emptyConfig('p'), { owner: '', repo: '', branch: 'main', proxy_url: '' });
 });
 

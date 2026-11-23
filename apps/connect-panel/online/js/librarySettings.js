@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js?v=20261123g';
+import { LIBRARIES } from './cloudClient.js?v=20261123h';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
@@ -28,7 +28,7 @@ function str(value) {
 
 export function emptyConfig(library) {
   if (library === 'm') return { space_id: '', proxy_url: '', path: '', sharecode: '' };
-  if (library === 't' || library === 'r') return { vault_root: '', managed_roots: [], tags: [] };
+  if (library === 't' || library === 'r') return { mode: 'local', vault_root: '', mcp_endpoint: '', managed_roots: [], tags: [] };
   if (library === 'p') return { owner: '', repo: '', branch: 'main', proxy_url: '' };
   throw new LibraryConfigError('LIBRARY_UNKNOWN', `未知库：${library}`);
 }
@@ -53,9 +53,20 @@ export function normalizeConfig(library, raw = {}) {
     if (vaultRoot && (vaultRoot.includes(':') || /^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(vaultRoot) || vaultRoot.startsWith('/') || vaultRoot.split('/').some((part) => part === '..'))) {
       throw new LibraryConfigError('VAULT_ROOT_INVALID', '库内目录只能填相对路径，例如 2-Permanent 或留空表示整库。');
     }
+    const mode = str(raw.mode) || 'local';
+    if (!['local', 'mcp'].includes(mode)) {
+      throw new LibraryConfigError('MODE_INVALID', '接入方式只能是 local 或 mcp。');
+    }
+    const mcpEndpoint = str(raw.mcp_endpoint);
+    if (mode === 'mcp') {
+      if (!mcpEndpoint) throw new LibraryConfigError('MCP_ENDPOINT_REQUIRED', 'MCP 模式必须填写端点地址。');
+      if (!/^https?:\/\//u.test(mcpEndpoint)) throw new LibraryConfigError('MCP_ENDPOINT_INVALID', 'MCP 端点必须以 http:// 或 https:// 开头。');
+    }
     return {
       ...base,
+      mode,
       vault_root: vaultRoot,
+      mcp_endpoint: mcpEndpoint,
       managed_roots: listOf(raw.managed_roots, 8),
       tags: listOf(raw.tags, 8),
     };
@@ -208,4 +219,18 @@ export async function testConnection(library, config, fetcher = globalThis.fetch
   }
   // T/R 无远端服务可测，只能校验配置本身。
   return { ok: true, message: '目录设置已保存；文件读取需在本机授权 Obsidian 文件夹后生效。', detail: null };
+}
+
+/** Agent 网关是否可用：经代理实测一次，避免把 key 暴露到前端。 */
+export async function testAgent(config, fetcher = globalThis.fetch) {
+  const proxy = (config?.proxy_url ?? '').replace(/\/+$/u, '');
+  const sharecode = config?.sharecode ?? '';
+  if (!proxy || !sharecode) throw new LibraryConfigError('AGENT_PROXY_MISSING', '请在 M 库高级设置里填好代理地址与访问码。');
+  const url = `${proxy}/mtrp/agent-check?sharecode=${encodeURIComponent(sharecode)}`;
+  const response = await fetcher(url, { headers: { accept: 'application/json' } });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new LibraryConfigError('AGENT_FAILED', payload?.message ?? `Agent 检查失败（HTTP ${response.status}）。`);
+  }
+  return { ok: true, message: payload.message, detail: payload };
 }

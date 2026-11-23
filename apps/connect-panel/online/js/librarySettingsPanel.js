@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123g';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123h';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -12,8 +12,8 @@ import {
   normalizeConfig,
   saveConnection,
   testConnection,
-} from './librarySettings.js?v=20261123g';
-import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123g';
+} from './librarySettings.js?v=20261123h';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123h';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -273,6 +273,8 @@ export class LibrarySettingsPanel {
   renderField(library, field, advanced = false) {
     const id = `lib-${library}-${field.key}`;
     const row = el(this.document, 'div', '', advanced ? 'settings-field is-advanced' : 'settings-field');
+    row.dataset.field = field.key;
+    if (field.onlyMode) row.dataset.onlyMode = field.onlyMode;
     const head = el(this.document, 'div', '', 'settings-field-head');
     const label = el(this.document, 'label', field.label + (field.required ? ' *' : ''), 'settings-label');
     label.setAttribute('for', id);
@@ -285,15 +287,40 @@ export class LibrarySettingsPanel {
       link.title = field.helpLink.label;
       head.append(link);
     }
-    const input = el(this.document, 'input', '', 'text-input');
+    let input;
+    if (field.type === 'select') {
+      input = el(this.document, 'select', '', 'text-input');
+      for (const option of field.options ?? []) {
+        const node = el(this.document, 'option', option.label);
+        node.value = option.value;
+        input.append(node);
+      }
+      input.value = this.forms[library][field.key] ?? field.defaultValue ?? '';
+      input.addEventListener('change', () => {
+        this.forms[library][field.key] = input.value;
+        this.applyModeVisibility(library);
+      });
+    } else {
+      input = el(this.document, 'input', '', 'text-input');
+      input.spellcheck = false;
+      input.placeholder = field.placeholder ?? '';
+      input.value = this.forms[library][field.key] ?? '';
+      input.addEventListener('input', () => { this.forms[library][field.key] = input.value; });
+    }
     input.id = id;
-    input.spellcheck = false;
-    input.placeholder = field.placeholder ?? '';
-    input.value = this.forms[library][field.key] ?? '';
-    input.addEventListener('input', () => { this.forms[library][field.key] = input.value; });
     row.append(head, input);
     if (field.helpText) row.append(el(this.document, 'p', field.helpText, 'field-help'));
     return row;
+  }
+
+  /** 本地 / MCP 二选一时，只显示当前模式相关的字段。 */
+  applyModeVisibility(library) {
+    const card = this.cardNode(library);
+    if (!card) return;
+    const mode = this.forms[library]?.mode ?? 'local';
+    for (const row of card.querySelectorAll('[data-only-mode]')) {
+      row.hidden = row.dataset.onlyMode !== mode;
+    }
   }
 
   renderCard(library) {
@@ -330,6 +357,7 @@ export class LibrarySettingsPanel {
     const result = el(this.document, 'p', '', 'settings-result');
     result.dataset.role = 'result';
     card.append(result);
+    queueMicrotask(() => this.applyModeVisibility(library.id));
     return card;
   }
 
@@ -435,8 +463,79 @@ export class LibrarySettingsPanel {
     }
   }
 
+  /** 按固定步骤跑一遍联通性，每一步都给出真实回执或明确失败原因。 */
+  async runSelfTest() {
+    const host = this.root.querySelector('#connectivity-report');
+    const btn = this.root.querySelector('#run-connectivity-test');
+    if (!host || this.selfTesting) return;
+    this.selfTesting = true;
+    if (btn) btn.disabled = true;
+    host.hidden = false;
+    host.replaceChildren();
+    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123h');
+    const results = [];
+    const render = () => {
+      host.replaceChildren();
+      for (const item of results) {
+        const line = el(this.document, 'div', '', `wf-line is-${item.state}`);
+        const mark = { ok: '✓', failed: '✗', skipped: '–', running: '…', pending: '·' }[item.state] ?? '·';
+        line.append(el(this.document, 'span', mark, 'wf-mark'), el(this.document, 'span', `${item.label}：${item.message}`, 'wf-text'));
+        host.append(line);
+      }
+      const sum = summarize(results);
+      host.append(el(this.document, 'p', sum.allPassed ? `全部通过（${sum.ok} 项）` : `通过 ${sum.ok} · 失败 ${sum.failed} · 跳过 ${sum.skipped}`, sum.failed ? 'settings-error' : 'settings-ok'));
+    };
+    for (const step of WORKFLOW_STEPS) {
+      const entry = { ...step, state: STEP_STATE.running, message: '检查中…' };
+      results.push(entry);
+      render();
+      try {
+        if (step.id === 'm') {
+          entry.message = checkM(this.entries.m?.config).message;
+          const { testConnection } = await import('./librarySettings.js?v=20261123h');
+          const r = await testConnection('m', this.entries.m?.config ?? {});
+          entry.state = STEP_STATE.ok;
+          entry.message = r.message;
+        } else if (step.id === 't' || step.id === 'r') {
+          const cfg = this.entries[step.id]?.config;
+          const chk = checkVault(cfg);
+          entry.state = chk.state;
+          entry.message = chk.message;
+        } else if (step.id === 'p') {
+          const cfg = this.entries.p?.config;
+          const chk = checkGithub(cfg);
+          if (chk.state === STEP_STATE.ok) {
+            const { testConnection } = await import('./librarySettings.js?v=20261123h');
+            const r = await testConnection('p', cfg);
+            entry.message = r.message;
+          } else {
+            entry.message = chk.message;
+          }
+          entry.state = chk.state;
+        } else {
+          const { testAgent } = await import('./librarySettings.js?v=20261123h');
+          const r = await testAgent(this.entries.m?.config ?? {});
+          entry.state = STEP_STATE.ok;
+          entry.message = r.message;
+        }
+      } catch (error) {
+        entry.state = STEP_STATE.failed;
+        entry.message = error?.message ?? '检查失败。';
+      }
+      render();
+    }
+    this.selfTesting = false;
+    if (btn) btn.disabled = false;
+  }
+
   renderFooter() {
     const wrap = el(this.document, 'div', '', 'settings-footer');
+    const selfTest = button(this.document, '一键联通自检', 'primary-button', () => this.runSelfTest());
+    selfTest.id = 'run-connectivity-test';
+    const report = el(this.document, 'div', '', 'workflow-report');
+    report.id = 'connectivity-report';
+    report.hidden = true;
+    wrap.append(selfTest, report);
     wrap.append(
       el(this.document, 'p', 'Obsidian 目录读取授权保存在本机浏览器，不会随账号同步；换机器需要重新选择文件夹。', 'settings-hint'),
       button(this.document, '退出登录', 'secondary-button', async () => {

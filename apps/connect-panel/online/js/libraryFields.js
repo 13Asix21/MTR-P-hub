@@ -11,8 +11,8 @@ export const FIELD_HELP = {
       placeholder: '选择或粘贴知识库 ID',
       required: true,
       // 默认值 = 已验证可用的空间，先能跑通再改
-      defaultValue: 'c3f157b3d03d4c7fa46a8fb8e70b1ae7',
-      helpText: '在乐享里打开目标知识库，地址栏 /space/<这串 ID> 就是它。',
+      defaultValue: 'bda1340e5541477d9698d82dc9a4b451',
+      helpText: '已默认填好你的「M库范式」知识库；换库时在乐享打开目标库，地址栏 /space/<这串 ID> 就是它。',
       helpLink: { label: '打开乐享知识库', url: 'https://m.lexiang-app.com/' },
     },
     {
@@ -27,24 +27,72 @@ export const FIELD_HELP = {
   ],
   t: [
     {
-      key: 'vault_root',
-      label: '只扫描这个文件夹',
-      placeholder: '留空 = 整个库',
-      required: false,
-      defaultValue: '',
-      helpText: '库内相对路径；留空就是扫描整个 Obsidian 库。',
+      key: 'mode',
+      label: '接入方式',
+      type: 'select',
+      options: [
+        { value: 'local', label: '本地文件夹（浏览器直接读取）' },
+        { value: 'mcp', label: 'MCP 服务（远端库）' },
+      ],
+      required: true,
+      defaultValue: 'local',
+      helpText: '本地模式在本机授权 Obsidian 库；MCP 模式读取部署好的远端服务。',
       helpLink: null,
     },
-  ],
-  r: [
     {
       key: 'vault_root',
       label: '只扫描这个文件夹',
       placeholder: '留空 = 整个库',
       required: false,
       defaultValue: '',
+      helpText: '本地模式填库内相对路径；留空就是整库。',
+      helpLink: null,
+      onlyMode: 'local',
+    },
+    {
+      key: 'mcp_endpoint',
+      label: 'MCP 端点地址',
+      placeholder: 'https://你的-obsidian-mcp/mcp',
+      required: false,
+      defaultValue: '',
+      helpText: 'MCP 模式必填，填写提供 Obsidian 读取能力的 MCP 服务地址。',
+      helpLink: null,
+      onlyMode: 'mcp',
+    },
+  ],
+  r: [
+    {
+      key: 'mode',
+      label: '接入方式',
+      type: 'select',
+      options: [
+        { value: 'local', label: '本地文件夹（浏览器直接读取）' },
+        { value: 'mcp', label: 'MCP 服务（远端库）' },
+      ],
+      required: true,
+      defaultValue: 'local',
       helpText: '通常与 T 库相同；R 库只按标签区分口径。',
       helpLink: null,
+    },
+    {
+      key: 'vault_root',
+      label: '只扫描这个文件夹',
+      placeholder: '留空 = 整个库',
+      required: false,
+      defaultValue: '',
+      helpText: '本地模式填库内相对路径；留空就是整库。',
+      helpLink: null,
+      onlyMode: 'local',
+    },
+    {
+      key: 'mcp_endpoint',
+      label: 'MCP 端点地址',
+      placeholder: 'https://你的-obsidian-mcp/mcp',
+      required: false,
+      defaultValue: '',
+      helpText: 'MCP 模式必填，填写提供 Obsidian 读取能力的 MCP 服务地址。',
+      helpLink: null,
+      onlyMode: 'mcp',
     },
   ],
   p: [
@@ -114,7 +162,13 @@ export function buildConfig(library, values) {
     };
   }
   if (library === 't' || library === 'r') {
-    return { vault_root: (values.vault_root ?? '').trim(), managed_roots: [], tags: [] };
+    return {
+      mode: (values.mode ?? 'local').trim() || 'local',
+      vault_root: (values.vault_root ?? '').trim(),
+      mcp_endpoint: (values.mcp_endpoint ?? '').trim(),
+      managed_roots: [],
+      tags: [],
+    };
   }
   // P 库把 owner/repo 拆开保存，界面上是一个输入框。
   const repo = (values.repo ?? '').trim().replace(/^https?:\/\/github\.com\//u, '').replace(/\.git$/u, '');
@@ -137,7 +191,7 @@ export function toFormValues(library, config = {}) {
       sharecode: config.sharecode ?? '',
     };
   }
-  if (library === 't' || library === 'r') return { vault_root: config.vault_root ?? '' };
+  if (library === 't' || library === 'r') return { mode: config.mode ?? 'local', vault_root: config.vault_root ?? '', mcp_endpoint: config.mcp_endpoint ?? '' };
   const owner = config.owner ?? '';
   const repo = config.repo ?? '';
   return {

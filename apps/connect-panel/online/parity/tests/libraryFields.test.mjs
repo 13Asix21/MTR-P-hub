@@ -5,7 +5,7 @@ import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } f
 
 test('M 库默认值已能直接连通，无需手填', () => {
   const d = defaultsFor('m');
-  assert.equal(d.space_id, 'c3f157b3d03d4c7fa46a8fb8e70b1ae7');
+  assert.equal(d.space_id, 'bda1340e5541477d9698d82dc9a4b451', '默认应为真实的 M库范式');
   assert.equal(d.proxy_url, 'https://mtrp-lexiang-proxy.app.workbuddy.host');
   assert.equal(d.sharecode, 'QOPTB45RQL');
 });
@@ -35,8 +35,9 @@ test('P 库空分支回退 main', () => {
 
 test('T/R 库只需要一个目录，其余留空', () => {
   const config = buildConfig('t', { vault_root: '2-Permanent' });
-  assert.deepEqual(config, { vault_root: '2-Permanent', managed_roots: [], tags: [] });
+  assert.deepEqual(config, { mode: 'local', vault_root: '2-Permanent', mcp_endpoint: '', managed_roots: [], tags: [] });
   assert.equal(buildConfig('r', {}).vault_root, '');
+  assert.equal(buildConfig('r', {}).mode, 'local');
 });
 
 test('每个必填项都提供了获取引导或默认值', () => {
