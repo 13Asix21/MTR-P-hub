@@ -4,7 +4,7 @@
  * 浏览器无法直连乐享 MCP（CORS 被拦），所以必须经用户配置的服务端代理。
  * 这里只发「标题 + 正文 + 目标」的最小载荷；不发 token，代理自己持有凭据。
  */
-import { LibraryConfigError } from './librarySettings.js?v=20261123h';
+import { LibraryConfigError } from './librarySettings.js?v=20261123j';
 
 export const TRANSFER_PATH = '/mtrp/transfer';
 

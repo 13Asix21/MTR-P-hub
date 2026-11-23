@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123h';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123j';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -12,8 +12,8 @@ import {
   normalizeConfig,
   saveConnection,
   testConnection,
-} from './librarySettings.js?v=20261123h';
-import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123h';
+} from './librarySettings.js?v=20261123j';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123j';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -246,6 +246,8 @@ export class LibrarySettingsPanel {
       this.forms[library.id] = saved.saved
         ? toFormValues(library.id, saved.config)
         : defaultsFor(library.id);
+      // 本机凭据不来自云端，从本地读回填。
+      if (library.id === 'p') this.forms.p.github_token = this.readLocalField('github_token');
     }
     const box = el(this.document, 'div', '', 'settings-panel');
     const user = this.session?.user ?? {};
@@ -303,9 +305,15 @@ export class LibrarySettingsPanel {
     } else {
       input = el(this.document, 'input', '', 'text-input');
       input.spellcheck = false;
+      input.type = field.type === 'password' ? 'password' : 'text';
+      if (field.localOnly) input.autocomplete = 'off';
       input.placeholder = field.placeholder ?? '';
       input.value = this.forms[library][field.key] ?? '';
-      input.addEventListener('input', () => { this.forms[library][field.key] = input.value; });
+      input.addEventListener('input', () => {
+        this.forms[library][field.key] = input.value;
+        // 凭据类字段单独存本机，不进云端配置。
+        if (field.localOnly) this.persistLocalField(field.key, input.value);
+      });
     }
     input.id = id;
     row.append(head, input);
@@ -385,6 +393,23 @@ export class LibrarySettingsPanel {
     node.classList.toggle('settings-ok', !isError && text.length > 0);
   }
 
+  persistLocalField(key, value) {
+    if (key !== 'github_token') return;
+    try {
+      if (value) globalThis.localStorage?.setItem('mtrp.githubToken', value);
+      else globalThis.localStorage?.removeItem('mtrp.githubToken');
+    } catch { /* 忽略隐私模式 */ }
+  }
+
+  readLocalField(key) {
+    if (key !== 'github_token') return '';
+    try {
+      return globalThis.localStorage?.getItem('mtrp.githubToken') ?? '';
+    } catch {
+      return '';
+    }
+  }
+
   async save(library) {
     if (this.busy) return null;
     this.busy = true;
@@ -392,6 +417,8 @@ export class LibrarySettingsPanel {
     try {
       const cloud = await getCloud();
       const config = buildConfig(library, this.forms[library]);
+      // 本机凭据字段不参与云端校验与保存。
+      delete config.github_token;
       normalizeConfig(library, config);
       const saved = await saveConnection(cloud, library, {
         config,
@@ -472,7 +499,7 @@ export class LibrarySettingsPanel {
     if (btn) btn.disabled = true;
     host.hidden = false;
     host.replaceChildren();
-    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123h');
+    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123j');
     const results = [];
     const render = () => {
       host.replaceChildren();
@@ -492,7 +519,7 @@ export class LibrarySettingsPanel {
       try {
         if (step.id === 'm') {
           entry.message = checkM(this.entries.m?.config).message;
-          const { testConnection } = await import('./librarySettings.js?v=20261123h');
+          const { testConnection } = await import('./librarySettings.js?v=20261123j');
           const r = await testConnection('m', this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
@@ -505,15 +532,16 @@ export class LibrarySettingsPanel {
           const cfg = this.entries.p?.config;
           const chk = checkGithub(cfg);
           if (chk.state === STEP_STATE.ok) {
-            const { testConnection } = await import('./librarySettings.js?v=20261123h');
-            const r = await testConnection('p', cfg);
+            const { checkGithubAccess } = await import('./librarySettings.js?v=20261123j');
+            const r = await checkGithubAccess(cfg);
             entry.message = r.message;
+            if (!r.writable) entry.state = STEP_STATE.ok;
           } else {
             entry.message = chk.message;
           }
           entry.state = chk.state;
         } else {
-          const { testAgent } = await import('./librarySettings.js?v=20261123h');
+          const { testAgent } = await import('./librarySettings.js?v=20261123j');
           const r = await testAgent(this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;

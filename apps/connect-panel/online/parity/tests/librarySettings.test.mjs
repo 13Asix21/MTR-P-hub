@@ -182,3 +182,47 @@ test('未填仓库时拒绝探活', async () => {
     (error) => error.code === 'GITHUB_INCOMPLETE',
   );
 });
+
+test('GitHub token 不会被拼进云端配置（buildConfig 剔除本机字段）', async () => {
+  const { buildConfig } = await import('../../js/libraryFields.js');
+  const config = buildConfig('p', { repo: 'a/b', github_token: 'ghp_secret' });
+  assert.equal('github_token' in config, false, 'token 不得进入云端配置');
+  assert.equal(JSON.stringify(config).includes('ghp_'), false);
+});
+
+test('若误把 token 塞进配置，normalizeConfig 会主动拒绝而非静默保存', () => {
+  assert.throws(
+    () => normalizeConfig('p', { owner: 'a', repo: 'b', github_token: 'ghp_secret' }),
+    (e) => e.code === 'SECRET_NOT_ALLOWED',
+  );
+});
+
+test('GitHub token 本机读写可往返，清除后为空', async () => {
+  const store = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => store.get(k) ?? null,
+    setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k),
+  };
+  const { rememberGithubToken, readGithubToken } = await import('../../js/librarySettings.js');
+  rememberGithubToken('ghp_x');
+  assert.equal(readGithubToken(), 'ghp_x');
+  rememberGithubToken('');
+  assert.equal(readGithubToken(), '');
+  delete globalThis.localStorage;
+});
+
+test('有代理时走 github-check 并带回可写性', async () => {
+  const calls = [];
+  const fetcher = async (url, init) => {
+    calls.push({ url, headers: init?.headers ?? {} });
+    return { ok: true, status: 200, json: async () => ({ ok: true, writable: true, message: '可读写：a/b' }) };
+  };
+  globalThis.localStorage = { getItem: () => 'ghp_t', setItem: () => {}, removeItem: () => {} };
+  const { checkGithubAccess } = await import('../../js/librarySettings.js');
+  const r = await checkGithubAccess({ owner: 'a', repo: 'b', proxy_url: 'https://p', sharecode: 'SC1' }, fetcher);
+  assert.equal(r.writable, true);
+  assert.match(calls[0].url, /\/mtrp\/github-check\?sharecode=SC1&owner=a&repo=b/u);
+  assert.equal(calls[0].headers['x-mtrp-github-token'], 'ghp_t');
+  delete globalThis.localStorage;
+});

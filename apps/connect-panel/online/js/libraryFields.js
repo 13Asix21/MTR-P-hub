@@ -139,6 +139,16 @@ export const ADVANCED_FIELDS = {
   ],
   p: [
     {
+      key: 'github_token',
+      label: 'GitHub Token（写入需要）',
+      type: 'password',
+      placeholder: 'ghp_... 或 github_pat_...',
+      defaultValue: '',
+      helpText: '只保存在本机浏览器，不写入云端。用于读取私有仓库或提交内容；只读用途可留空。',
+      helpLink: { label: '创建 Token', url: 'https://github.com/settings/tokens/new?scopes=repo&description=MTR-P' },
+      localOnly: true,
+    },
+    {
       key: 'proxy_url',
       label: 'GitHub 代理地址（可选）',
       placeholder: '私有仓库或限流时填写',
@@ -170,7 +180,8 @@ export function buildConfig(library, values) {
       tags: [],
     };
   }
-  // P 库把 owner/repo 拆开保存，界面上是一个输入框。
+  // P 库：github_token 是本机凭据，不进云端配置（由 localStorage 单独保管）。
+  // 把 owner/repo 拆开保存，界面上是一个输入框。
   const repo = (values.repo ?? '').trim().replace(/^https?:\/\/github\.com\//u, '').replace(/\.git$/u, '');
   const [owner, name] = repo.split('/');
   return {

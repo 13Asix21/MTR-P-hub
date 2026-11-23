@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js?v=20261123h';
+import { LIBRARIES } from './cloudClient.js?v=20261123j';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
@@ -89,6 +89,7 @@ export function normalizeConfig(library, raw = {}) {
   }
   const owner = str(raw.owner);
   const repo = str(raw.repo);
+  // github_token 属于本机凭据，绝不进云端配置。
   if (owner && !/^[A-Za-z0-9_.-]{1,39}$/u.test(owner)) {
     throw new LibraryConfigError('GITHUB_OWNER_INVALID', 'GitHub 所有者名格式不正确。');
   }
@@ -104,6 +105,44 @@ export function normalizeConfig(library, raw = {}) {
     throw new LibraryConfigError('PROXY_URL_INVALID', '代理地址必须以 http:// 或 https:// 开头。');
   }
   return { ...base, owner, repo, branch, proxy_url: proxyUrl };
+}
+
+/** GitHub token 单独存本机，不进云端。 */
+export function rememberGithubToken(token) {
+  try {
+    if (token) globalThis.localStorage?.setItem('mtrp.githubToken', token);
+    else globalThis.localStorage?.removeItem('mtrp.githubToken');
+  } catch { /* 隐私模式下列表不可用，忽略 */ }
+}
+
+export function readGithubToken() {
+  try {
+    return globalThis.localStorage?.getItem('mtrp.githubToken') ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** 经代理探查该仓库是否可写（token 只发往代理，不发往第三方）。 */
+export async function checkGithubAccess(config, fetcher = globalThis.fetch) {
+  const proxy = (config?.proxy_url ?? '').replace(/\/+$/u, '');
+  const sharecode = config?.sharecode ?? '';
+  const token = readGithubToken();
+  if (proxy && sharecode) {
+    const url = `${proxy}/mtrp/github-check?sharecode=${encodeURIComponent(sharecode)}&owner=${encodeURIComponent(config.owner ?? '')}&repo=${encodeURIComponent(config.repo ?? '')}`;
+    const response = await fetcher(url, { headers: { accept: 'application/json', ...(token ? { 'x-mtrp-github-token': token } : {}) } });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) throw new LibraryConfigError('GITHUB_CHECK_FAILED', payload?.message ?? `检查失败（HTTP ${response.status}）。`);
+    return payload;
+  }
+  // 没有代理时只能做匿名读取
+  const info = await probeGithub(config, fetcher);
+  return {
+    ok: true,
+    writable: false,
+    can_push: false,
+    message: `只读：${info.full_name}（未配置代理，无法验证写入权限）`,
+  };
 }
 
 /** 数据库行 → 面板可用对象。 */
@@ -210,12 +249,9 @@ export async function testConnection(library, config, fetcher = globalThis.fetch
     return { ok: true, message: payload.message, detail: payload };
   }
   if (library === 'p') {
-    const info = await probeGithub(config, fetcher);
-    return {
-      ok: true,
-      message: `连接正常：${info.full_name}（默认分支 ${info.default_branch || '未知'}，${info.private ? '私有' : '公开'}）`,
-      detail: info,
-    };
+    // 有代理时能判断能否写入；没有代理只能匿名读，且易被限流。
+    const access = await checkGithubAccess(config, fetcher);
+    return { ok: true, message: access.message, detail: access };
   }
   // T/R 无远端服务可测，只能校验配置本身。
   return { ok: true, message: '目录设置已保存；文件读取需在本机授权 Obsidian 文件夹后生效。', detail: null };

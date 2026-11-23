@@ -285,6 +285,80 @@ def agent_check() -> dict[str, Any]:
     return {"ok": True, "model": model_used, "message": f"Agent 可用：{model_used}"}
 
 
+def _github_headers(pat: str) -> dict[str, str]:
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "mtrp-proxy"}
+    if pat:
+        headers["Authorization"] = f"Bearer {pat}"
+    return headers
+
+
+def github_check(owner: str, repo: str, pat: str) -> dict[str, Any]:
+    """探查仓库是否可写：读取 permissions，并判断这把 token 能否 push。"""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    if not owner or not repo:
+        raise TransferError(400, "REPO_REQUIRED", "缺少 owner 或 repo。")
+    request = urllib.request.Request(
+        f"https://api.github.com/repos/{owner}/{repo}", headers=_github_headers(pat), method="GET"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = _json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise TransferError(404, "GITHUB_NOT_FOUND", "仓库不存在，或私有仓库缺少有效 token。") from None
+        if error.code == 401:
+            raise TransferError(401, "GITHUB_TOKEN_INVALID", "GitHub token 无效或已过期。") from None
+        if error.code == 403:
+            raise TransferError(
+                403, "GITHUB_RATE_LIMITED",
+                "GitHub 限流：匿名请求额度已用尽，请在高级设置填 GitHub Token 后重试。",
+            ) from None
+        raise TransferError(502, "GITHUB_ERROR", f"GitHub 返回 {error.code}。") from None
+    perms = body.get("permissions") or {}
+    can_push = bool(perms.get("push"))
+    writable = can_push and not body.get("archived", False)
+    return {
+        "ok": True,
+        "full_name": body.get("full_name"),
+        "private": bool(body.get("private")),
+        "default_branch": body.get("default_branch"),
+        "can_push": can_push,
+        "writable": writable,
+        "token_used": bool(pat),
+        "message": (
+            f"可读写：{body.get('full_name')}（{'私有' if body.get('private') else '公开'}，可推送）"
+            if writable else
+            f"只读：{body.get('full_name')}（{'未提供 token' if not pat else 'token 无 push 权限'}，只能读取）"
+        ),
+    }
+
+
+def github_scope(pat: str) -> dict[str, Any]:
+    """返回该 token 的身份与权限范围，便于用户判断能否写入。"""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    if not pat:
+        raise TransferError(400, "TOKEN_REQUIRED", "缺少 GitHub token。")
+    request = urllib.request.Request("https://api.github.com/user", headers=_github_headers(pat), method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = _json.loads(response.read().decode("utf-8"))
+            scopes = response.headers.get("X-OAuth-Scopes", "")
+    except urllib.error.HTTPError as error:
+        raise TransferError(401, "GITHUB_TOKEN_INVALID", f"GitHub token 无效（{error.code}）。") from None
+    return {
+        "ok": True,
+        "login": body.get("login"),
+        "scopes": [item.strip() for item in scopes.split(",") if item.strip()],
+        "message": f"Token 属于 {body.get('login')}，权限：{scopes or '未声明'}",
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     """最小 HTTP 处理器：健康检查、CORS 预检、传送。"""
 
@@ -320,7 +394,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "content-type, x-mtrp-sharecode")
+            self.send_header("Access-Control-Allow-Headers", "content-type, x-mtrp-sharecode, x-mtrp-github-token")
             self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
 
@@ -336,6 +410,26 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
             except Exception as error:  # pragma: no cover
                 self._send(502, {"ok": False, "code": "UPSTREAM_FAILED", "message": str(error)[:200]})
+            return
+        if self._route() == "/mtrp/github-check":
+            import urllib.parse
+            query = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            owner = (query.get("owner") or [""])[0].strip()
+            repo = (query.get("repo") or [""])[0].strip()
+            pat = self.headers.get("X-MTRP-GitHub-Token", "").strip() or os.environ.get("MTRP_GITHUB_TOKEN", "").strip()
+            try:
+                self._send(200, github_check(owner, repo, pat))
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
+            except Exception as error:  # pragma: no cover
+                self._send(502, {"ok": False, "code": "GITHUB_FAILED", "message": str(error)[:200]})
+            return
+        if self._route() == "/mtrp/github-scope":
+            pat = self.headers.get("X-MTRP-GitHub-Token", "").strip() or os.environ.get("MTRP_GITHUB_TOKEN", "").strip()
+            try:
+                self._send(200, github_scope(pat))
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
             return
         if self._route() == "/mtrp/agent-check":
             try:

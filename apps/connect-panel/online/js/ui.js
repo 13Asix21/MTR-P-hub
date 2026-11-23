@@ -1,8 +1,8 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123h';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123h';
-import { downloadExportPair } from './export.js?v=20261123h';
-import { renderNotePreview } from './markdownPreview.js?v=20261123h';
-import { transferApprovedNote } from './transfer.js?v=20261123h';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123j';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123j';
+import { downloadExportPair } from './export.js?v=20261123j';
+import { renderNotePreview } from './markdownPreview.js?v=20261123j';
+import { transferApprovedNote } from './transfer.js?v=20261123j';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -195,7 +195,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123h');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123j');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -215,7 +215,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123h');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123j');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -254,9 +254,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261123h');
-      const { loadConnections } = await import('./librarySettings.js?v=20261123h');
-      const { currentSession } = await import('./cloudClient.js?v=20261123h');
+      const { getCloud } = await import('./cloudClient.js?v=20261123j');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123j');
+      const { currentSession } = await import('./cloudClient.js?v=20261123j');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;

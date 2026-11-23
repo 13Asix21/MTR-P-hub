@@ -1,0 +1,16 @@
+M 库 space_id 来源（真实 MCP 调用记录）
+==============================================
+
+步骤 1  lexiang_search(type=space, query="M库范式")
+        endpoint: https://mcp.lexiang-app.com/mcp
+        title=M库范式  space_id=bda1340e5541477d9698d82dc9a4b451
+        title=示例知识库  space_id=3526dbad018e4f1c9d9ff7b6fb2fbed8
+        title=元.波的个人知识库  space_id=c3f157b3d03d4c7fa46a8fb8e70b1ae7
+
+步骤 2  lexiang_fetch(resource=space, id=bda1340e5541477d9698d82dc9a4b451)
+        name       = M库范式
+        id         = bda1340e5541477d9698d82dc9a4b451
+        root_entry = 03560d98485a4dd9b90f40de26277c83
+        team_id    = 35b01c02c45811f1b66546bc50a37e22
+
+结论：该串来自乐享 MCP 返回的 space.id 字段，不是人工编造。
