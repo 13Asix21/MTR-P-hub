@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123e';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -12,7 +12,7 @@ import {
   normalizeConfig,
   probeGithub,
   saveConnection,
-} from './librarySettings.js';
+} from './librarySettings.js?v=20261123e';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -32,7 +32,8 @@ const FIELD_SCHEMA = {
   m: [
     { key: 'space_id', label: '乐享空间 ID', placeholder: '例如 c3f157b3d03d4c7fa46a8fb8e70b1ae7' },
     { key: 'path', label: '目标路径（相对知识库根）', placeholder: '例如 研发/工业视觉，留空表示根目录' },
-    { key: 'proxy_url', label: '乐享代理地址（服务端）', placeholder: 'https://your-gateway/mtrp/lexiang，留空表示未接入' },
+    { key: 'proxy_url', label: '乐享代理地址（独立应用链接）', placeholder: 'https://mtrp-lexiang-proxy.app.workbuddy.host' },
+    { key: 'sharecode', label: '代理 sharecode', placeholder: '代理分享链接里 sharecode= 后面那串' },
   ],
   t: [
     { key: 'vault_root', label: '库内起始目录（相对路径）', placeholder: '留空 = 整个库；或填 2-Permanent' },
@@ -356,7 +357,11 @@ export class LibrarySettingsPanel {
   describeState(library, entry) {
     if (!entry.saved) return library === 'm' ? '未配置。乐享必须经服务端代理访问。' : '未配置。';
     if (!entry.enabled) return '已停用，不会参与查询。';
-    if (library === 'm') return entry.config.proxy_url ? `已配置代理 · 目标路径：${entry.config.path || '知识库根目录'}；可在审核页通过后点「传送到 M 库」。` : '缺少代理地址，乐享暂不可用。';
+    if (library === 'm') {
+      if (!entry.config.proxy_url) return '缺少代理地址，乐享暂不可用。';
+      if (!entry.config.sharecode) return '已填代理地址，但缺少 sharecode，传送会被代理拒绝。';
+      return `已配置代理 · 目标路径：${entry.config.path || '知识库根目录'}；可在审核页通过后点「传送到 M 库」。`;
+    }
     if (library === 't' || library === 'r') return `目录：${entry.config.vault_root || '整个库'}；文件授权需在各机器本地授予。`;
     if (library === 'p') return entry.config.owner && entry.config.repo ? `仓库：${entry.config.owner}/${entry.config.repo}` : '缺少仓库信息。';
     return '';

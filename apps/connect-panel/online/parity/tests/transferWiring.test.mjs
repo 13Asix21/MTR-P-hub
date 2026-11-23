@@ -55,7 +55,7 @@ test('未加载配置时显示读取中，且传送按钮不可用', () => {
 test('加载到 M 库配置后显示空间与目标路径', () => {
   const ui = buildUi();
   ui.transferConfigLoaded = true;
-  ui.mLibraryConfig = { space_id: 'space-1', path: '研发/工业视觉', proxy_url: 'https://gw' };
+  ui.mLibraryConfig = { space_id: 'space-1', path: '研发/工业视觉', proxy_url: 'https://gw', sharecode: 'SC1234' };
   ui.session = { user: { id: 'u' } };
   ui.services.transferToLibrary = async () => ({ message: 'ok' });
   assert.match(ui.describeTransferTarget(), /空间 space-1/u);
@@ -69,7 +69,7 @@ test('配置齐全即可点传送，未登录在点击时被拒绝', () => {
   ui.mLibraryConfig = { space_id: 's', path: '', proxy_url: '' };
   ui.services.transferToLibrary = async () => ({});
   assert.equal(ui.canTransfer(), false, '缺代理时禁用');
-  ui.mLibraryConfig = { space_id: 's', path: '', proxy_url: 'https://gw' };
+  ui.mLibraryConfig = { space_id: 's', path: '', proxy_url: 'https://gw', sharecode: 'SC' };
   assert.equal(ui.canTransfer(), true, '配置齐全即可点，会话在点击时校验');
 });
 

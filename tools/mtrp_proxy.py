@@ -17,7 +17,27 @@ import json
 import os
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
+
+
+def load_dotenv(path: Path | None = None) -> None:
+    """读取同目录 .env 填入环境变量；已存在的环境变量优先，不覆盖。
+
+    只做最小的 KEY=VALUE 解析，避免为一个配置文件引入额外依赖。
+    """
+    target = path or Path(__file__).resolve().with_name(".env")
+    if not target.is_file():
+        return
+    for raw in target.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+load_dotenv()
 
 LEXIANG_ENDPOINT = os.environ.get("MTRP_LEXIANG_ENDPOINT", "https://mcp.lexiang-app.com/mcp")
 MAX_BODY_BYTES = 2 * 1024 * 1024
@@ -127,9 +147,12 @@ async def _resolve_parent(session: Any, space_id: str, path: str) -> str:
 async def transfer(req: TransferRequest, token: str) -> dict[str, Any]:
     """创建页面条目并写入正文，返回 entry_id。"""
     from mcp import ClientSession
-    from mcp.client.streamable_http import streamablehttp_client
 
-    async with streamablehttp_client(LEXIANG_ENDPOINT, headers={"Authorization": f"Bearer {token}"}) as (read, write, _):
+    auth = {"Authorization": f"Bearer {token}"}
+    opener = _select_opener(auth)
+
+    async with opener() as streams:
+        read, write = streams[0], streams[1]
         async with ClientSession(read, write) as session:
             await session.initialize()
             parent = await _resolve_parent(session, req.space_id, req.path)
@@ -155,10 +178,56 @@ async def transfer(req: TransferRequest, token: str) -> dict[str, Any]:
             }
 
 
+
+def _select_opener(auth: dict[str, str]):
+    """按部署环境的 mcp 版本选择连接方式，并注入 Authorization 头。
+
+    已探测到的形态：
+      * 旧版：streamablehttp_client(url, headers=...)
+      * 部分版本：streamable_http_client(url, httpx_client_factory=...)
+      * 线上实际：streamable_http_client(url, http_client=httpx2.AsyncClient(...))
+    """
+    import inspect
+
+    try:
+        from mcp.client.streamable_http import streamablehttp_client
+        params = inspect.signature(streamablehttp_client).parameters
+        if "headers" in params:
+            return lambda: streamablehttp_client(LEXIANG_ENDPOINT, headers=auth)
+    except ImportError:
+        pass
+
+    from mcp.client.streamable_http import streamable_http_client
+
+    params = inspect.signature(streamable_http_client).parameters
+    if "http_client" in params:
+        return lambda: streamable_http_client(LEXIANG_ENDPOINT, http_client=_async_client(auth))
+    if "httpx_client_factory" in params:
+        return lambda: streamable_http_client(LEXIANG_ENDPOINT, httpx_client_factory=lambda **kw: _async_client(auth, kw))
+    return lambda: streamable_http_client(LEXIANG_ENDPOINT)
+
+
+def _async_client(auth: dict[str, str], options: dict[str, Any] | None = None):
+    """优先 httpx2，其次 httpx；两者 API 一致。"""
+    options = options or {}
+    kwargs = {"headers": auth, "follow_redirects": True}
+    if options.get("timeout") is not None:
+        kwargs["timeout"] = options["timeout"]
+    try:
+        import httpx2
+        return httpx2.AsyncClient(**kwargs)
+    except ImportError:
+        import httpx
+        return httpx.AsyncClient(**kwargs)
+
 class Handler(BaseHTTPRequestHandler):
     """最小 HTTP 处理器：健康检查、CORS 预检、传送。"""
 
     server_version = "MTRPProxy/1.0"
+
+    def _route(self) -> str:
+        """去掉查询串再路由：平台网关会用 sharecode 做访问控制并在转发前剥离它。"""
+        return self.path.split("?", 1)[0]
 
     def _origin(self) -> str | None:
         origin = self.headers.get("Origin")
@@ -186,18 +255,18 @@ class Handler(BaseHTTPRequestHandler):
         if origin:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "content-type")
+            self.send_header("Access-Control-Allow-Headers", "content-type, x-mtrp-sharecode")
             self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/mtrp/health":
+        if self._route() == "/mtrp/health":
             self._send(200, {"ok": True, "token_configured": bool(os.environ.get("MTRP_LEXIANG_TOKEN"))})
             return
         self._send(404, {"ok": False, "message": "未知路径。"})
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/mtrp/transfer":
+        if self._route() != "/mtrp/transfer":
             self._send(404, {"ok": False, "message": "未知路径。"})
             return
         if self._origin() is None:
@@ -228,11 +297,16 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="MTR-P 乐享传送代理（仅回环）")
-    parser.add_argument("--port", type=int, default=8012)
+    parser = argparse.ArgumentParser(description="MTR-P 乐享传送代理")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8012")))
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("MTRP_PROXY_HOST", "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"),
+        help="监听地址；部署平台要求 0.0.0.0，本机调试默认 127.0.0.1",
+    )
     args = parser.parse_args()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"MTR-P 代理已就绪：http://127.0.0.1:{server.server_port}/mtrp/health", flush=True)
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    print(f"MTR-P 代理已就绪：http://{args.host}:{server.server_port}/mtrp/health", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

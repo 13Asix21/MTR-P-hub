@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js';
+import { LIBRARIES } from './cloudClient.js?v=20261123e';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
@@ -27,7 +27,7 @@ function str(value) {
 }
 
 export function emptyConfig(library) {
-  if (library === 'm') return { space_id: '', proxy_url: '', path: '' };
+  if (library === 'm') return { space_id: '', proxy_url: '', path: '', sharecode: '' };
   if (library === 't' || library === 'r') return { vault_root: '', managed_roots: [], tags: [] };
   if (library === 'p') return { owner: '', repo: '', branch: 'main', proxy_url: '' };
   throw new LibraryConfigError('LIBRARY_UNKNOWN', `未知库：${library}`);
@@ -70,7 +70,11 @@ export function normalizeConfig(library, raw = {}) {
     if (path.split('/').some((part) => part === '..')) {
       throw new LibraryConfigError('PATH_INVALID', '目标路径不能包含 .. 回到上级目录。');
     }
-    return { ...base, space_id: spaceId, proxy_url: proxyUrl, path };
+    const sharecode = str(raw.sharecode);
+    if (sharecode && !/^[A-Za-z0-9_-]{4,64}$/u.test(sharecode)) {
+      throw new LibraryConfigError('SHARECODE_INVALID', 'sharecode 格式不正确（应为代理分享链接里的那串字符）。');
+    }
+    return { ...base, space_id: spaceId, proxy_url: proxyUrl, path, sharecode };
   }
   const owner = str(raw.owner);
   const repo = str(raw.repo);

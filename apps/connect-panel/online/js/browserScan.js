@@ -1,5 +1,5 @@
-import { DEFAULT_EXCLUDED_ROOTS, isExcluded, loadFileDetail } from './scanner.js';
-import { decodeUtf8Sig } from './parser.js';
+import { DEFAULT_EXCLUDED_ROOTS, isExcluded, loadFileDetail } from './scanner.js?v=20261123e';
+import { decodeUtf8Sig } from './parser.js?v=20261123e';
 
 /** 浏览器适配器只返回 File 的原始字节，不接触写句柄。 */
 export function createBrowserAdapter(root) {

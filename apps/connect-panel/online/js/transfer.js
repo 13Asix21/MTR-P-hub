@@ -4,7 +4,7 @@
  * 浏览器无法直连乐享 MCP（CORS 被拦），所以必须经用户配置的服务端代理。
  * 这里只发「标题 + 正文 + 目标」的最小载荷；不发 token，代理自己持有凭据。
  */
-import { LibraryConfigError } from './librarySettings.js';
+import { LibraryConfigError } from './librarySettings.js?v=20261123e';
 
 export const TRANSFER_PATH = '/mtrp/transfer';
 
@@ -27,6 +27,16 @@ export function noteTitle(path) {
 }
 
 /**
+ * 代理自身的 sharecode：网关用它控制对该应用链接的访问。
+ * 注意不能复用审核页地址里的 sharecode —— 那是主应用的凭证，跨应用不通用。
+ * 这个值会出现在前端源码里，属于“链接可见即授权”的边界，与代理自己的分享链接同级。
+ */
+export function proxySharecode(library) {
+  const value = library?.sharecode;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
  * @param {object} input
  * @param {string} input.path Vault 内相对路径
  * @param {object} input.detail 详情（含 raw_text / item.sha256）
@@ -40,14 +50,18 @@ export async function transferApprovedNote({ path, detail, library, session }, f
   if (!rawText) throw new LibraryConfigError('EMPTY_CONTENT', '这篇没有可传送的正文。');
   const sha = detail?.item?.sha256 ?? '';
   if (!sha) throw new LibraryConfigError('SHA_MISSING', '缺少当前内容 SHA，请重新打开详情后再传送。');
-
   const { frontmatter, body } = splitForTransfer(rawText);
-  const endpoint = library.proxy_url.replace(/\/+$/u, '') + TRANSFER_PATH;
+  const sharecode = proxySharecode(library);
+  if (!sharecode) throw new LibraryConfigError('SHARECODE_REQUIRED', '请在在线设置里填写乐享代理的 sharecode（在代理分享链接里）。');
+  // 已经是规范的代理路径就不再重复拼接，避免出现 /mtrp/transfer/mtrp/transfer。
+  const base = library.proxy_url.replace(/\/+$/u, '');
+  const pathPart = base.endsWith(TRANSFER_PATH) ? base : base + TRANSFER_PATH;
+  const endpoint = `${pathPart}${pathPart.includes('?') ? '&' : '?'}sharecode=${encodeURIComponent(sharecode)}`;
   let response;
   try {
     response = await fetcher(endpoint, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-mtrp-sharecode': sharecode },
       body: JSON.stringify({
         space_id: library.space_id,
         path: library.path ?? '',
@@ -60,6 +74,9 @@ export async function transferApprovedNote({ path, detail, library, session }, f
     });
   } catch (error) {
     throw new LibraryConfigError('PROXY_UNREACHABLE', `无法连接乐享代理：${String(error?.message ?? error).slice(0, 80)}`);
+  }
+  if (response.status === 403) {
+    throw new LibraryConfigError('SHARECODE_REJECTED', '代理拒绝了访问：sharecode 不正确或已失效，请到在线设置更新。');
   }
   if (!response.ok) {
     throw new LibraryConfigError('TRANSFER_FAILED', `传送失败（HTTP ${response.status}），请检查代理日志。`);

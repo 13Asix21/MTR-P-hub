@@ -13,7 +13,7 @@ test('默认传送实现必须在 ...services 之后注入，否则会被 undefi
 });
 
 test('传送模块被显式导入', () => {
-  assert.match(source, /import \{ transferApprovedNote \} from '\.\/transfer\.js'/u);
+  assert.match(source, /import \{ transferApprovedNote \} from '\.\/transfer\.js(\?v=[^']*)?'/u);
 });
 
 test('默认实现只注入一次', () => {

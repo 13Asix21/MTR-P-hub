@@ -1,8 +1,8 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js';
-import { downloadExportPair } from './export.js';
-import { renderNotePreview } from './markdownPreview.js';
-import { transferApprovedNote } from './transfer.js';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123e';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123e';
+import { downloadExportPair } from './export.js?v=20261123e';
+import { renderNotePreview } from './markdownPreview.js?v=20261123e';
+import { transferApprovedNote } from './transfer.js?v=20261123e';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -185,7 +185,7 @@ export class WorkbenchUi {
     const wrap = element(this.document, 'div', '', 'settings-entry');
     wrap.setAttribute('aria-label', '在线设置');
     const open = button(this.document, '在线设置 · 我的库连接', 'secondary-button', async () => {
-      const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js');
+      const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123e');
       if (!this.settingsPanel) {
         this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
       }
@@ -195,7 +195,7 @@ export class WorkbenchUi {
     });
     open.id = 'open-settings';
     const explain = button(this.document, '看看流转说明', 'secondary-button', async () => {
-      const { FlowExplainer } = await import('./flowExplainer.js');
+      const { FlowExplainer } = await import('./flowExplainer.js?v=20261123e');
       this.flowHost = element(this.document, 'div', '', 'settings-host');
       wrap.append(this.flowHost);
       const mConfig = await this.loadMLibraryConfig();
@@ -217,9 +217,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js');
-      const { loadConnections } = await import('./librarySettings.js');
-      const { currentSession } = await import('./cloudClient.js');
+      const { getCloud } = await import('./cloudClient.js?v=20261123e');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123e');
+      const { currentSession } = await import('./cloudClient.js?v=20261123e');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -565,7 +565,7 @@ export class WorkbenchUi {
     const send = this.detailPanel?.querySelector('#transfer-to-m');
     if (!send) return;
     const config = this.mLibraryConfig;
-    const ready = Boolean(config?.space_id && config?.proxy_url);
+    const ready = Boolean(config?.space_id && config?.proxy_url && config?.sharecode);
     const loaded = Boolean(this.transferConfigLoaded);
     send.disabled = !(loaded && ready);
     const hint = send.parentElement?.querySelector('.flow-hint');
@@ -574,7 +574,7 @@ export class WorkbenchUi {
         ? '正在读取在线设置…'
         : ready
           ? ''
-          : '需在「在线设置」填写乐享空间与代理地址后才可传送。';
+          : '需在「在线设置」填写乐享空间、代理地址与代理 sharecode 后才可传送。';
     }
   }
 
@@ -630,7 +630,7 @@ export class WorkbenchUi {
   canTransfer() {
     const config = this.mLibraryConfig;
     // 会话在点击传送时再校验（transfer.js 内会拒绝未登录），避免详情先渲染、会话后到的时序问题。
-    return Boolean(config?.space_id && config?.proxy_url && this.services.transferToLibrary);
+    return Boolean(config?.space_id && config?.proxy_url && config?.sharecode && this.services.transferToLibrary);
   }
 
   /** 详情渲染前异步取一次云端 M 库配置；成功后重绘结论区，不需要用户手动刷新。 */

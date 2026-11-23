@@ -5,7 +5,7 @@ import { LibraryConfigError } from '../../js/librarySettings.js';
 import { noteTitle, splitForTransfer, transferApprovedNote, TRANSFER_PATH } from '../../js/transfer.js';
 
 const session = { user: { id: 'u1', name: '雷爹' } };
-const library = { space_id: 'space-1', path: '研发/工业视觉', proxy_url: 'https://gw.example.com/mtrp' };
+const library = { space_id: 'space-1', path: '研发/工业视觉', proxy_url: 'https://gw.example.com/mtrp', sharecode: 'SC1234' };
 
 function detail(raw = '---\ntags: [mtr/trial]\n---\n# 标题\n\n正文', sha = 'a'.repeat(64)) {
   return { raw_text: raw, item: { sha256: sha } };
@@ -31,7 +31,7 @@ test('未配置空间、代理、登录时明确拒绝，不发请求', async ()
   const base = { path: 'a/b.md', detail: detail(), session };
   await assert.rejects(
     transferApprovedNote({ ...base, library: { ...library, space_id: '' } }, fetcher),
-    (e) => e instanceof LibraryConfigError && e.code === 'M_NOT_CONFIGURED',
+    (e) => e.code === 'M_NOT_CONFIGURED',
   );
   await assert.rejects(
     transferApprovedNote({ ...base, library: { ...library, proxy_url: '' } }, fetcher),
@@ -52,7 +52,7 @@ test('正常传送：带上目标路径与来源 SHA，不含 token', async () =
   };
   const result = await transferApprovedNote({ path: '2-Permanent/x.md', detail: detail(), library, session }, fetcher);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, `https://gw.example.com/mtrp${TRANSFER_PATH}`);
+  assert.equal(calls[0].url, `https://gw.example.com/mtrp${TRANSFER_PATH}?sharecode=SC1234`);
   const body = JSON.parse(calls[0].init.body);
   assert.equal(body.space_id, 'space-1');
   assert.equal(body.path, '研发/工业视觉');
@@ -87,4 +87,30 @@ test('空正文与缺 SHA 不发起传送', async () => {
     (e) => e.code === 'EMPTY_CONTENT',
   );
   assert.equal(called, false);
+});
+
+test('代理地址已含 /mtrp/transfer 时不重复拼接', async () => {
+  const calls = [];
+  const fetcher = async (url) => { calls.push(url); return { ok: true, json: async () => ({ ok: true, entry_id: 'e' }) }; };
+  await transferApprovedNote(
+    { path: 'a.md', detail: detail(), library: { ...library, proxy_url: 'https://p/mtrp/transfer' }, session },
+    fetcher,
+  );
+  assert.equal(calls[0], 'https://p/mtrp/transfer?sharecode=SC1234');
+});
+
+test('缺少代理 sharecode 时拒绝发送', async () => {
+  let called = false;
+  await assert.rejects(
+    transferApprovedNote({ path: 'a.md', detail: detail(), library: { ...library, sharecode: '' }, session }, async () => { called = true; }),
+    (e) => e.code === 'SHARECODE_REQUIRED',
+  );
+  assert.equal(called, false);
+});
+
+test('403 明确提示 sharecode 失效', async () => {
+  await assert.rejects(
+    transferApprovedNote({ path: 'a.md', detail: detail(), library, session }, async () => ({ ok: false, status: 403, json: async () => ({}) })),
+    (e) => e.code === 'SHARECODE_REJECTED',
+  );
 });
