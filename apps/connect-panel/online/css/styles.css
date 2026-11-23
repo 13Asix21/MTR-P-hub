@@ -255,3 +255,17 @@ textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline:
 .wf-line.is-skipped .wf-mark { color: #8b9490; }
 .wf-line.is-running .wf-mark { color: #b4690e; }
 .wf-line.is-failed .wf-text { color: #a3231b; }
+
+/* 批量传送状态栏 */
+.transfer-status {
+  flex: 1 1 100%;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f1f7f4;
+  color: #175d52;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.transfer-status.is-done { background: #e2f2ea; }
+.transfer-status.is-error { background: #fdf3f2; color: #a3231b; }

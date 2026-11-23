@@ -1,4 +1,4 @@
-import { sha256Bytes } from './hasher.js?v=20261123l';
+import { sha256Bytes } from './hasher.js?v=20261123n';
 import { loadYaml } from '../vendor/js-yaml.mjs';
 
 const INLINE_TAG = /(?<![\p{L}\p{N}_#])#(mtr\/(?:trial|rarely))(?![\p{L}\p{N}_/-])/gu;

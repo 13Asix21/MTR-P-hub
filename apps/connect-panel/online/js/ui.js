@@ -1,8 +1,8 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123l';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123l';
-import { downloadExportPair } from './export.js?v=20261123l';
-import { renderNotePreview } from './markdownPreview.js?v=20261123l';
-import { transferApprovedNote } from './transfer.js?v=20261123l';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123n';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123n';
+import { downloadExportPair } from './export.js?v=20261123n';
+import { renderNotePreview } from './markdownPreview.js?v=20261123n';
+import { transferApprovedNote } from './transfer.js?v=20261123n';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -58,6 +58,8 @@ export class WorkbenchUi {
     this.restoreHandle = null;
     this.storageWarning = '';
     this.restorePromise = null;
+    this.transferredPaths = new Set();
+    this.transferJob = null;
     this.confirm = services.confirm ?? ((message) => globalThis.confirm(message));
     this.online = services.online ?? (() => globalThis.navigator?.onLine !== false);
     this.onKeyDown = (event) => this.handleKey(event);
@@ -195,7 +197,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123l');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261123n');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -215,7 +217,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123l');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123n');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -254,9 +256,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261123l');
-      const { loadConnections } = await import('./librarySettings.js?v=20261123l');
-      const { currentSession } = await import('./cloudClient.js?v=20261123l');
+      const { getCloud } = await import('./cloudClient.js?v=20261123n');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123n');
+      const { currentSession } = await import('./cloudClient.js?v=20261123n');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -391,11 +393,15 @@ export class WorkbenchUi {
     const rescan = button(this.document, '重新选择并扫描', 'secondary-button', () => this.renderEmpty('请重新授权目录；已读本机队列不会被清空。'));
     const clear = button(this.document, '清除本机台账…', 'danger-button', () => this.clearLocalData());
     clear.id = 'clear-local-data';
+    const transferStatus = element(this.document, 'p', '', 'transfer-status');
+    transferStatus.id = 'transfer-status';
+    transferStatus.setAttribute('role', 'status');
+    transferStatus.hidden = true;
     const settingsBtn = button(this.document, '⚙ 库设置', 'secondary-button', () => this.openSettings());
     settingsBtn.id = 'open-settings-inline';
     const flowBtn = button(this.document, '流转说明', 'secondary-button', () => this.openFlowGuide());
     flowBtn.id = 'open-flow-inline';
-    toolbar.append(search, filter, settingsBtn, flowBtn, exportButton, rescan, clear);
+    toolbar.append(search, filter, settingsBtn, flowBtn, exportButton, rescan, clear, transferStatus);
     const list = element(this.document, 'section', '', 'note-list');
     list.id = 'note-list';
     this.detailPanel = element(this.document, 'aside', '', 'detail-panel');
@@ -464,6 +470,10 @@ export class WorkbenchUi {
       control.dataset.batchAction = action;
       bar.append(control);
     }
+    // 批量通过后一次性把已通过项送到 M 库，省去逐篇点传送。
+    const send = button(this.document, '批量传送到 M 库', 'primary-button', () => this.batchTransfer());
+    send.id = 'batch-transfer';
+    bar.append(send);
     bar.prepend(all, count);
     return bar;
   }
@@ -730,7 +740,9 @@ export class WorkbenchUi {
         session: this.session,
       });
       if (node) node.textContent = result.message;
+      this.transferredPaths.add(path);
       this.setNotice(`已传送：${path}`);
+      this.updateTransferStatus();
     } catch (error) {
       if (node) {
         node.textContent = error?.message ?? '传送失败。';
@@ -809,10 +821,76 @@ export class WorkbenchUi {
         this.selectedPaths = new Set(result.failures.map((failure) => failure.path));
         this.detail = null;
         this.renderWorkbench();
-        this.setNotice(`批量完成 ${result.completed.length} 篇，未处理 ${result.failures.length} 篇。冲突及失败项仍保留，已读队列未清空。${result.failures.map((failure) => `${failure.path}: ${failure.code}`).join('；')}`);
+        const passed = result.completed.length;
+        const hint = action === 'approved' && passed > 0 ? `　已通过 ${passed} 篇，可点「批量传送到 M 库」写入乐享。` : '';
+        this.setNotice(`批量完成 ${passed} 篇，未处理 ${result.failures.length} 篇。冲突及失败项仍保留，已读队列未清空。${hint}${result.failures.map((failure) => `${failure.path}: ${failure.code}`).join('；')}`);
+        this.updateTransferStatus();
       } catch (error) { this.setNotice(errorMessage(error)); }
       finally { this.actionBusy = false; }
     });
+  }
+
+  /** 批量传送：把当前筛选内已通过、且尚未传送的笔记逐篇送到 M 库。 */
+  async batchTransfer() {
+    if (this.actionBusy) return;
+    const approved = this.listing.items
+      .filter((item) => this.state.items?.[item.vault_relative_path]?.action === 'approved')
+      .filter((item) => !this.transferredPaths.has(item.vault_relative_path))
+      .map((item) => item.vault_relative_path);
+    if (approved.length === 0) {
+      this.setNotice('当前没有「已通过且尚未传送」的笔记。请先批量通过，或检查是否已全部传送过。');
+      return;
+    }
+    if (!this.canTransfer()) {
+      this.setNotice('未配置 M 库传送（空间 / 代理地址 / 访问码），请先在「在线设置」补齐并点测试连接。');
+      return;
+    }
+    if (!this.confirm(`将把 ${approved.length} 篇已通过笔记传送到 M 库，逐篇写入乐享。继续？`)) return;
+
+    return this.serialAction(async () => {
+      this.actionBusy = true;
+      this.transferJob = { total: approved.length, done: 0, ok: 0, failed: 0, running: true };
+      this.updateTransferStatus();
+      try {
+        for (const path of approved) {
+          const item = this.listing.items.find((candidate) => candidate.vault_relative_path === path);
+          try {
+            const detail = await this.actionService.detail(item, this.state);
+            const transfer = this.services.transferToLibrary ?? transferApprovedNote;
+            await transfer({ path, detail, library: this.mLibraryConfig, session: this.session });
+            this.transferredPaths.add(path);
+            this.transferJob.ok += 1;
+          } catch (error) {
+            this.transferJob.failed += 1;
+            this.transferJob.lastError = `${path}: ${error?.message ?? '失败'}`;
+          }
+          this.transferJob.done += 1;
+          this.updateTransferStatus();
+        }
+      } finally {
+        this.transferJob.running = false;
+        this.actionBusy = false;
+        this.renderWorkbench();
+        // renderWorkbench 会重建工具栏，状态栏需在重建后重新填充。
+        this.updateTransferStatus();
+      }
+    });
+  }
+
+  /** 传送状态栏：随批量进度更新，结束后保留结果摘要。 */
+  updateTransferStatus() {
+    const bar = this.root.querySelector('#transfer-status');
+    if (!bar) return;
+    const job = this.transferJob;
+    if (!job) { bar.hidden = true; return; }
+    bar.hidden = false;
+    const parts = [`传送 ${job.done}/${job.total}`];
+    if (job.ok) parts.push(`成功 ${job.ok}`);
+    if (job.failed) parts.push(`失败 ${job.failed}`);
+    if (job.running) parts.push('进行中…');
+    bar.textContent = parts.join(' · ') + (job.lastError ? `　最近失败：${job.lastError}` : '');
+    bar.classList.toggle('is-error', Boolean(job.failed) && !job.running);
+    bar.classList.toggle('is-done', !job.running && job.failed === 0);
   }
 
   async exportApproved(control) {

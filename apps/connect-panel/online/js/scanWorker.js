@@ -1,5 +1,5 @@
-import { compareCodePoints } from './parser.js?v=20261123l';
-import { collectListing, compactScannedFact, DEFAULT_EXCLUDED_ROOTS, DEFAULT_MANAGED_ROOTS, isExcluded, MAX_FILE_BYTES, MAX_SCAN_FILES, normalizeRoots, casefold } from './scanner.js?v=20261123l';
+import { compareCodePoints } from './parser.js?v=20261123n';
+import { collectListing, compactScannedFact, DEFAULT_EXCLUDED_ROOTS, DEFAULT_MANAGED_ROOTS, isExcluded, MAX_FILE_BYTES, MAX_SCAN_FILES, normalizeRoots, casefold } from './scanner.js?v=20261123n';
 
 // 本文件只在浏览器 Worker 或 Node 测试中执行；fileHandle 始终是只读句柄。
 const workerScope = typeof self === 'undefined' ? null : self;
@@ -7,7 +7,7 @@ if (workerScope && typeof window === 'undefined') workerScope.onmessage = async 
   const { id, fileHandle, relative, mtime, size } = event.data;
   try {
     const bytes = new Uint8Array(await (await fileHandle.getFile()).arrayBuffer());
-    const { scanFileBytes } = await import('./scanner.js?v=20261123l');
+    const { scanFileBytes } = await import('./scanner.js?v=20261123n');
     const fact = await scanFileBytes(relative, bytes, { size_bytes: size, mtime, maxFileBytes: MAX_FILE_BYTES });
     fact.raw_bytes = [];
     workerScope.postMessage({ id, fact });

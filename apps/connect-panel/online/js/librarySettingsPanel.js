@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123l';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123n';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -12,8 +12,8 @@ import {
   normalizeConfig,
   saveConnection,
   testConnection,
-} from './librarySettings.js?v=20261123l';
-import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123l';
+} from './librarySettings.js?v=20261123n';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, toFormValues } from './libraryFields.js?v=20261123n';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -499,7 +499,7 @@ export class LibrarySettingsPanel {
     if (btn) btn.disabled = true;
     host.hidden = false;
     host.replaceChildren();
-    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123l');
+    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123n');
     const results = [];
     const render = () => {
       host.replaceChildren();
@@ -519,7 +519,7 @@ export class LibrarySettingsPanel {
       try {
         if (step.id === 'm') {
           entry.message = checkM(this.entries.m?.config).message;
-          const { testConnection } = await import('./librarySettings.js?v=20261123l');
+          const { testConnection } = await import('./librarySettings.js?v=20261123n');
           const r = await testConnection('m', this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
@@ -532,7 +532,7 @@ export class LibrarySettingsPanel {
           const cfg = this.entries.p?.config;
           const chk = checkGithub(cfg);
           if (chk.state === STEP_STATE.ok) {
-            const { checkGithubAccess } = await import('./librarySettings.js?v=20261123l');
+            const { checkGithubAccess } = await import('./librarySettings.js?v=20261123n');
             const r = await checkGithubAccess(cfg);
             entry.message = r.message;
             if (!r.writable) entry.state = STEP_STATE.ok;
@@ -541,7 +541,7 @@ export class LibrarySettingsPanel {
           }
           entry.state = chk.state;
         } else {
-          const { testAgent } = await import('./librarySettings.js?v=20261123l');
+          const { testAgent } = await import('./librarySettings.js?v=20261123n');
           const r = await testAgent(this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
