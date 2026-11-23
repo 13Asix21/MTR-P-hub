@@ -31,6 +31,7 @@ function button(document, text, className, onClick) {
 const FIELD_SCHEMA = {
   m: [
     { key: 'space_id', label: '乐享空间 ID', placeholder: '例如 c3f157b3d03d4c7fa46a8fb8e70b1ae7' },
+    { key: 'path', label: '目标路径（相对知识库根）', placeholder: '例如 研发/工业视觉，留空表示根目录' },
     { key: 'proxy_url', label: '乐享代理地址（服务端）', placeholder: 'https://your-gateway/mtrp/lexiang，留空表示未接入' },
   ],
   t: [
@@ -126,13 +127,110 @@ export class LibrarySettingsPanel {
     );
     if (message) box.append(el(this.document, 'p', message, 'settings-error'));
 
-    const workbuddy = button(this.document, '使用 WorkBuddy 登录', 'primary-button', () => this.startLogin('workbuddy'));
-    const wechat = button(this.document, '微信登录', 'secondary-button', () => this.startLogin('wechat'));
-    box.append(el(this.document, 'div', '', 'settings-actions'), workbuddy, wechat);
+    // 手机号 + 短信验证码（主流方式，不依赖第三方账号）
+    const phoneForm = el(this.document, 'div', '', 'login-block');
+    phoneForm.append(el(this.document, 'h3', '手机号验证码登录'));
+    const phoneLabel = el(this.document, 'label', '手机号', 'settings-label');
+    phoneLabel.setAttribute('for', 'login-phone');
+    const phone = el(this.document, 'input', '', 'text-input');
+    phone.id = 'login-phone';
+    phone.type = 'tel';
+    phone.inputMode = 'numeric';
+    phone.autocomplete = 'tel';
+    phone.placeholder = '请输入 11 位手机号';
+    phone.maxLength = 11;
+    const phoneError = el(this.document, 'p', '', 'settings-error');
+    phoneError.hidden = true;
+    const sendCode = button(this.document, '获取验证码', 'secondary-button', () => this.sendPhoneCode(phone.value));
+    sendCode.id = 'send-phone-code';
+    const codeRow = el(this.document, 'div', '', 'settings-actions');
+    codeRow.append(phone, sendCode);
+    const codeLabel = el(this.document, 'label', '短信验证码', 'settings-label');
+    codeLabel.setAttribute('for', 'login-code');
+    const code = el(this.document, 'input', '', 'text-input');
+    code.id = 'login-code';
+    code.inputMode = 'numeric';
+    code.autocomplete = 'one-time-code';
+    code.placeholder = '6 位验证码';
+    const submit = button(this.document, '登录 / 注册', 'primary-button', () => this.submitPhoneLogin(phone.value, code.value));
+    submit.id = 'submit-phone-login';
+    phone.addEventListener('input', () => { phoneError.hidden = true; phone.classList.remove('input-invalid'); });
+    phoneForm.append(phoneLabel, codeRow, phoneError, codeLabel, code, submit);
+    box.append(phoneForm);
+
+    // 微信扫码
+    const wechat = button(this.document, '微信扫码登录', 'secondary-button', () => this.startLogin('wechat'));
+    wechat.id = 'login-wechat';
+    box.append(el(this.document, 'h3', '其他方式'), wechat);
+
     this.notice = el(this.document, 'p', '', 'notice');
     this.notice.id = 'settings-notice';
+    this.notice.setAttribute('role', 'status');
     box.append(this.notice);
     this.root.replaceChildren(box);
+    this.pendingOtp = null;
+  }
+
+  /** 校验失败不发请求；挑战保存在实例上，重试不会重发验证码。 */
+  async sendPhoneCode(phoneValue) {
+    const phone = String(phoneValue ?? '').trim();
+    if (!/^1\d{10}$/u.test(phone)) {
+      this.showPhoneError('请输入正确的 11 位手机号');
+      return;
+    }
+    this.setNotice('正在发送验证码…');
+    try {
+      const cloud = await getCloud();
+      const sent = await cloud.auth.sendOtp({ phone });
+      if (sent.error) {
+        this.setNotice(sent.error.message ?? '验证码发送失败。');
+        return;
+      }
+      this.pendingOtp = { phone, verificationId: sent.data.verificationId, isExistingUser: sent.data.isExistingUser };
+      this.setNotice('验证码已发送，请查收短信（5 分钟内有效）。');
+    } catch (error) {
+      this.setNotice(error?.message ?? '验证码发送失败。');
+    }
+  }
+
+  async submitPhoneLogin(phoneValue, codeValue) {
+    const phone = String(phoneValue ?? '').trim();
+    const token = String(codeValue ?? '').trim();
+    const pending = this.pendingOtp;
+    if (!pending || pending.phone !== phone) {
+      this.showPhoneError('请先获取当前手机号的验证码');
+      return;
+    }
+    if (!token) {
+      this.setNotice('请输入短信验证码。');
+      return;
+    }
+    this.setNotice('正在登录…');
+    try {
+      const cloud = await getCloud();
+      const completed = await cloud.auth.verifyOtp({
+        phone: pending.phone,
+        verificationId: pending.verificationId,
+        isExistingUser: pending.isExistingUser,
+        token,
+      });
+      if (completed.error) {
+        this.setNotice(completed.error.message ?? '验证码不正确或已过期。');
+        return;
+      }
+      this.pendingOtp = null;
+      this.session = completed.data;
+      await this.renderSettings();
+    } catch (error) {
+      this.setNotice(error?.message ?? '登录失败。');
+    }
+  }
+
+  showPhoneError(text) {
+    const node = this.root.querySelector('.settings-panel .settings-error');
+    const phone = this.root.querySelector('#login-phone');
+    if (node) { node.textContent = text; node.hidden = false; }
+    phone?.classList.add('input-invalid');
   }
 
   async startLogin(provider) {
@@ -258,7 +356,7 @@ export class LibrarySettingsPanel {
   describeState(library, entry) {
     if (!entry.saved) return library === 'm' ? '未配置。乐享必须经服务端代理访问。' : '未配置。';
     if (!entry.enabled) return '已停用，不会参与查询。';
-    if (library === 'm') return entry.config.proxy_url ? '已配置代理，可在 WorkBuddy 对话里通过 MCP 检索。' : '缺少代理地址，乐享暂不可用。';
+    if (library === 'm') return entry.config.proxy_url ? `已配置代理 · 目标路径：${entry.config.path || '知识库根目录'}；可在审核页通过后点「传送到 M 库」。` : '缺少代理地址，乐享暂不可用。';
     if (library === 't' || library === 'r') return `目录：${entry.config.vault_root || '整个库'}；文件授权需在各机器本地授予。`;
     if (library === 'p') return entry.config.owner && entry.config.repo ? `仓库：${entry.config.owner}/${entry.config.repo}` : '缺少仓库信息。';
     return '';

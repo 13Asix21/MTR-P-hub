@@ -5,6 +5,7 @@ import { OfflineBuffer } from './offlineBuffer.js';
 import { ReviewActionService } from './reviewActions.js';
 import { scanVaultWithWorkers } from './scanWorker.js';
 import { WorkbenchUi } from './ui.js';
+import { transferApprovedNote } from './transfer.js';
 
 /** 仅在 HTTPS 或可信回环静态源中注册，不把注册成功描述为已安装。 */
 export function registerAppShell(scope = globalThis) {
@@ -29,7 +30,9 @@ export function createWorkbench(documentRef, services = {}) {
     createActionService: (options) => new ReviewActionService(options),
     previewExport,
     downloadExportPair,
+    // 展开顺序很重要：默认实现必须放在 services 之后，否则会被 undefined 覆盖。
     ...services,
+    transferToLibrary: services.transferToLibrary ?? transferApprovedNote,
   });
   if (services.offlineBuffer) services.offlineBuffer.onError = (error) => workbench.showStorageError(error);
   return workbench;

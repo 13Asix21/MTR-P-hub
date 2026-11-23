@@ -27,7 +27,7 @@ function str(value) {
 }
 
 export function emptyConfig(library) {
-  if (library === 'm') return { space_id: '', proxy_url: '' };
+  if (library === 'm') return { space_id: '', proxy_url: '', path: '' };
   if (library === 't' || library === 'r') return { vault_root: '', managed_roots: [], tags: [] };
   if (library === 'p') return { owner: '', repo: '', branch: 'main', proxy_url: '' };
   throw new LibraryConfigError('LIBRARY_UNKNOWN', `未知库：${library}`);
@@ -63,10 +63,14 @@ export function normalizeConfig(library, raw = {}) {
   if (library === 'm') {
     const spaceId = str(raw.space_id);
     const proxyUrl = str(raw.proxy_url);
+    const path = str(raw.path).replaceAll('\\', '/').replace(/^\/+/u, '');
     if (proxyUrl && !/^https?:\/\//u.test(proxyUrl)) {
       throw new LibraryConfigError('PROXY_URL_INVALID', '代理地址必须以 http:// 或 https:// 开头。');
     }
-    return { ...base, space_id: spaceId, proxy_url: proxyUrl };
+    if (path.split('/').some((part) => part === '..')) {
+      throw new LibraryConfigError('PATH_INVALID', '目标路径不能包含 .. 回到上级目录。');
+    }
+    return { ...base, space_id: spaceId, proxy_url: proxyUrl, path };
   }
   const owner = str(raw.owner);
   const repo = str(raw.repo);

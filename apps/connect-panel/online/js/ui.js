@@ -1,6 +1,8 @@
 import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js';
 import { applyBatch, localProfileStatus } from './reviewWorkflow.js';
 import { downloadExportPair } from './export.js';
+import { renderNotePreview } from './markdownPreview.js';
+import { transferApprovedNote } from './transfer.js';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -192,8 +194,46 @@ export class WorkbenchUi {
       await this.settingsPanel.open(this.settingsHost);
     });
     open.id = 'open-settings';
-    wrap.append(open);
+    const explain = button(this.document, '看看流转说明', 'secondary-button', async () => {
+      const { FlowExplainer } = await import('./flowExplainer.js');
+      this.flowHost = element(this.document, 'div', '', 'settings-host');
+      wrap.append(this.flowHost);
+      const mConfig = await this.loadMLibraryConfig();
+      const counts = { approved: 0, rejected: 0 };
+      for (const record of Object.values(this.state?.items ?? {})) {
+        if (record?.action === 'approved') counts.approved += 1;
+        if (record?.action === 'rejected') counts.rejected += 1;
+      }
+      if (!this.flowExplainer) {
+        this.flowExplainer = new FlowExplainer(this.document, { onClose: () => this.closeFlow() });
+      }
+      this.flowExplainer.render(this.flowHost, { mConfig, counts });
+    });
+    explain.id = 'open-flow-guide';
+    wrap.append(open, explain);
     return wrap;
+  }
+
+  /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
+  async loadMLibraryConfig() {
+    try {
+      const { getCloud } = await import('./cloudClient.js');
+      const { loadConnections } = await import('./librarySettings.js');
+      const { currentSession } = await import('./cloudClient.js');
+      const { session } = await currentSession();
+      if (!session) return null;
+      this.session = session;
+      const map = await loadConnections(await getCloud());
+      return map.m?.config ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  closeFlow() {
+    this.flowHost?.replaceChildren();
+    this.flowHost?.remove();
+    this.flowHost = null;
   }
 
   closeSettings() {
@@ -455,9 +495,6 @@ export class WorkbenchUi {
       element(this.document, 'p', `当前 SHA-256：${detail.item.sha256} · ${detail.item.parse_status}${detail.stale ? ' · 旧审核已失效' : ''}`),
       element(this.document, 'p', detail.item.parse_status === 'ok' ? '只读原文：解析结果仅供审核，不会修改文件。' : '格式或编码异常仍计入分母；以下为只读原文，可人工通过、拒绝或跳过。'),
     );
-    const pre = element(this.document, 'pre', detail.raw_text ?? detail.body.text, 'note-source');
-    pre.id = 'note-source';
-    pre.tabIndex = 0;
     const reason = element(this.document, 'textarea');
     reason.id = 'review-reason';
     reason.maxLength = 500;
@@ -473,7 +510,181 @@ export class WorkbenchUi {
       if (action === 'undo') control.disabled = !detail.decision;
       actions.append(control);
     }
-    this.detailPanel.append(reason, actions, pre);
+    this.detailPanel.append(reason, actions);
+
+    // 审核结论与流转信息：拒绝留下可追溯标识，通过后才出现“传送到 M 库”。
+    if (!this.transferConfigLoaded) this.ensureTransferConfig();
+    this.detailPanel.append(this.renderDecisionFlow(item, detail));
+    this.detailPanel.append(this.renderSourceViews(detail));
+  }
+
+  /** 结论区：拒绝标识 + 通过后的传送入口。 */
+  renderDecisionFlow(item, detail) {
+    const wrap = element(this.document, 'section', '', 'decision-flow');
+    wrap.setAttribute('aria-label', '审核结论与流转');
+    const decision = detail.decision;
+    if (!decision) {
+      wrap.append(element(this.document, 'p', '尚未审核。通过后可传送到 M 库；拒绝会在台账中留下待清理标识。', 'flow-hint'));
+      return wrap;
+    }
+    const badge = element(this.document, 'span', decision.action === 'approved' ? '已通过' : decision.action === 'rejected' ? '已拒绝' : '已跳过', `flow-badge is-${decision.action}`);
+    const head = element(this.document, 'div', '', 'flow-head');
+    head.append(badge, element(this.document, 'span', `在 ${decision.decided_at ?? ''} 记录`, 'flow-time'));
+    wrap.append(head);
+    if (decision.reason) wrap.append(element(this.document, 'p', `理由：${decision.reason}`, 'flow-reason'));
+
+    if (decision.action === 'rejected') {
+      const box = element(this.document, 'div', '', 'reject-mark');
+      box.append(
+        element(this.document, 'strong', '已留下待清理标识'),
+        element(this.document, 'p', `台账记录：路径 ${item.vault_relative_path}、拒绝时 SHA ${String(detail.item.sha256).slice(0, 12)}…、理由与时间。后续删除或修改时以此为准，本页面不会改动 Obsidian 原文件。`),
+      );
+      wrap.append(box);
+    }
+
+    if (decision.action === 'approved') {
+      const row = element(this.document, 'div', '', 'flow-actions');
+      const targetText = this.describeTransferTarget();
+      row.append(element(this.document, 'span', targetText, 'flow-target'));
+      const send = button(this.document, '传送到 M 库', 'primary-button', () => this.transferToLibrary());
+      send.id = 'transfer-to-m';
+      row.append(send);
+      const hint = element(this.document, 'span', '', 'flow-hint');
+      row.append(hint);
+      const result = element(this.document, 'p', '', 'flow-result');
+      result.dataset.role = 'transfer-result';
+      wrap.append(row, result);
+      // 配置可能晚于详情到达：渲染后统一刷新按钮可用性。
+      this.syncTransferButton();
+    }
+    return wrap;
+  }
+
+  /** 按当前配置刷新传送按钮，避免渲染时序导致一直禁用。 */
+  syncTransferButton() {
+    const send = this.detailPanel?.querySelector('#transfer-to-m');
+    if (!send) return;
+    const config = this.mLibraryConfig;
+    const ready = Boolean(config?.space_id && config?.proxy_url);
+    const loaded = Boolean(this.transferConfigLoaded);
+    send.disabled = !(loaded && ready);
+    const hint = send.parentElement?.querySelector('.flow-hint');
+    if (hint) {
+      hint.textContent = !loaded
+        ? '正在读取在线设置…'
+        : ready
+          ? ''
+          : '需在「在线设置」填写乐享空间与代理地址后才可传送。';
+    }
+  }
+
+  /** 原文 / 预览双视图；预览只输出安全 HTML。 */
+  renderSourceViews(detail) {
+    const wrap = element(this.document, 'section', '', 'source-views');
+    const bar = element(this.document, 'div', '', 'view-tabs');
+    bar.setAttribute('role', 'tablist');
+    const rawText = detail.raw_text ?? detail.body.text ?? '';
+    const raw = element(this.document, 'pre', rawText, 'note-source');
+    raw.id = 'note-source';
+    raw.tabIndex = 0;
+    raw.hidden = true;
+    const preview = element(this.document, 'div', '', 'note-preview markdown-body');
+    preview.id = 'note-preview';
+    try {
+      const { frontmatterText, html } = renderNotePreview(rawText);
+      if (frontmatterText) {
+        const fm = element(this.document, 'pre', frontmatterText, 'md-frontmatter');
+        preview.append(fm);
+      }
+      // 内容来自本地已转义渲染器，不含用户原始 HTML。
+      preview.insertAdjacentHTML('beforeend', html);
+    } catch {
+      preview.append(element(this.document, 'p', '预览渲染失败，请查看原文。', 'notice'));
+    }
+    const tabs = [
+      ['preview', '预览', preview],
+      ['raw', '原文', raw],
+    ];
+    for (const [id, label, panel] of tabs) {
+      const tab = button(this.document, label, 'view-tab', () => {
+        for (const [, , other] of tabs) other.hidden = other !== panel;
+        for (const node of bar.querySelectorAll('.view-tab')) node.setAttribute('aria-selected', String(node.textContent === label));
+      });
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-selected', String(id === 'preview'));
+      tab.dataset.view = id;
+      bar.append(tab);
+    }
+    wrap.append(bar, preview, raw);
+    return wrap;
+  }
+
+  describeTransferTarget() {
+    const config = this.mLibraryConfig;
+    if (!this.transferConfigLoaded) return '目标：正在读取在线设置中的 M 库配置…';
+    if (!config || !config.space_id) return '目标：M 库（乐享知识库），尚未配置空间 ID';
+    const path = config.path ? `/${String(config.path).replace(/^\/+/u, '')}` : '（知识库根目录）';
+    return `目标：M 库（乐享知识库）· 空间 ${config.space_id} · 路径 ${path}`;
+  }
+
+  canTransfer() {
+    const config = this.mLibraryConfig;
+    // 会话在点击传送时再校验（transfer.js 内会拒绝未登录），避免详情先渲染、会话后到的时序问题。
+    return Boolean(config?.space_id && config?.proxy_url && this.services.transferToLibrary);
+  }
+
+  /** 详情渲染前异步取一次云端 M 库配置；成功后重绘结论区，不需要用户手动刷新。 */
+  ensureTransferConfig() {
+    if (this.transferConfigPromise) return this.transferConfigPromise;
+    this.transferConfigPromise = this.loadMLibraryConfig()
+      .then((config) => {
+        this.mLibraryConfig = config;
+        this.transferConfigLoaded = true;
+        this.refreshDecisionFlow();
+        this.syncTransferButton();
+      })
+      .catch(() => {
+        this.transferConfigLoaded = true;
+        this.refreshDecisionFlow();
+        this.syncTransferButton();
+      });
+    return this.transferConfigPromise;
+  }
+
+  /** 只替换结论区，不重绘整个详情，避免打断理由输入与原文选中。 */
+  refreshDecisionFlow() {
+    const panel = this.detailPanel;
+    if (!panel || !this.detail || !this.selectedPath) return;
+    const item = this.listing?.items?.find((candidate) => candidate.vault_relative_path === this.selectedPath);
+    if (!item) return;
+    const existing = panel.querySelector('.decision-flow');
+    const next = this.renderDecisionFlow(item, this.detail);
+    if (existing) existing.replaceWith(next);
+    else panel.append(next);
+  }
+
+  async transferToLibrary() {
+    const node = this.detailPanel.querySelector('[data-role="transfer-result"]');
+    const path = this.selectedPath;
+    if (!path) return;
+    if (node) node.textContent = '正在传送…';
+    try {
+      if (!this.session) await this.loadMLibraryConfig();
+      const transfer = this.services.transferToLibrary ?? transferApprovedNote;
+      const result = await transfer({
+        path,
+        detail: this.detail,
+        library: this.mLibraryConfig,
+        session: this.session,
+      });
+      if (node) node.textContent = result.message;
+      this.setNotice(`已传送：${path}`);
+    } catch (error) {
+      if (node) {
+        node.textContent = error?.message ?? '传送失败。';
+        node.classList.add('settings-error');
+      }
+    }
   }
 
   serialAction(operation) {
