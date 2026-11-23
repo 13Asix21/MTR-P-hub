@@ -128,9 +128,9 @@ export class WorkbenchUi {
   renderEmpty(message = '未选择目录') {
     this.clear();
     const main = element(this.document, 'main', '', 'stage-shell');
-    const select = button(this.document, '选择 Vault 文件夹', 'primary-button', async () => {
+    const select = button(this.document, '选择 Obsidian 库文件夹', 'primary-button', async () => {
       select.disabled = true;
-      this.setNotice('等待你选择 Vault 根目录。');
+      this.setNotice('等待你选择 Obsidian 库的根目录。');
       try {
         if (this.restorePromise) await this.restorePromise;
         if (!this.offlineAvailable) throw new Error('本机离线台账不可用，无法开始审核。请检查浏览器存储权限。');
@@ -162,8 +162,9 @@ export class WorkbenchUi {
     this.notice.setAttribute('role', 'status');
     main.append(
       element(this.document, 'p', '审核工作台 / 在线版', 'eyebrow'),
-      element(this.document, 'h1', '从本地 Vault 开始，继续你的审核。'),
-      element(this.document, 'p', '身份：本地浏览器档案（不是账号登录）。手动选择 Vault 后仅读取笔记，绝不写入 Vault。', 'lead'),
+      element(this.document, 'h1', '从你的 Obsidian 库开始，继续审核。'),
+      element(this.document, 'p', '身份：本地浏览器档案（不是账号登录）。手动选择 Obsidian 库后仅读取笔记，绝不写入库内文件。', 'lead'),
+      element(this.document, 'p', '适用于 PARA、Zettelkasten、扁平等多层文件夹结构：会递归遍历库内所有子文件夹下的 Markdown，自动跳过 .obsidian/.trash/.git 等隐藏目录。', 'privacy-note'),
       select,
       restore,
       element(this.document, 'p', '审核动作和理由仅保存于当前浏览器的 IndexedDB，不是云同步；笔记正文不进入台账，也不会发起云请求。', 'privacy-note'),
@@ -194,7 +195,7 @@ export class WorkbenchUi {
     const progress = element(this.document, 'progress', '', 'scan-progress');
     progress.max = 1;
     progress.value = 0;
-    this.notice = element(this.document, 'p', '正在扫描 2-Permanent…', 'notice');
+    this.notice = element(this.document, 'p', '正在遍历 Obsidian 库…', 'notice');
     this.notice.id = 'app-notice';
     const cancel = button(this.document, '中断扫描', 'secondary-button', () => this.abortController.abort());
     this.abortController = new AbortController();
@@ -202,7 +203,7 @@ export class WorkbenchUi {
     try {
       this.listing = await this.services.scan(handle, {
         signal: this.abortController.signal,
-        onProgress: ({ scanned, currentDirectory }) => { this.setNotice(`已扫描 ${scanned} / 当前目录 ${currentDirectory || '2-Permanent'}`); },
+        onProgress: ({ scanned, currentDirectory }) => { this.setNotice(`已扫描 ${scanned} 篇 / 当前目录 ${currentDirectory || '库根目录'}`); },
       });
       this.vaultId = await this.services.vaultId(handle.name, this.listing);
       this.state = await this.services.offlineBuffer.replayPending({ userId: 'local-browser', vaultId: this.vaultId });

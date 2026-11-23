@@ -76,15 +76,17 @@ test('Worker 并发上限 8、单篇读取失败不终止、排除目录计数�
     yield ['a.md', { kind: 'file', getFile: async () => { throw new DOMException('失效', 'NotAllowedError'); } }];
     yield ['bad.md', { kind: 'file', async arrayBuffer() { throw new Error('read'); }, async getFile() { return { size: 1, lastModified: 0 }; } }];
   };
-  const listing = await scanVaultWithWorkers(root, { workerFactory, concurrency: 2, excludedRoots: ['2-Permanent/Resources'] });
+  // 整库扫描下排除规则按库根相对路径匹配，因此这里用 'Resources' 而不是 '2-Permanent/Resources'。
+  const listing = await scanVaultWithWorkers(root, { workerFactory, concurrency: 2, excludedRoots: ['Resources'] });
   assert.equal(listing.total, 2);
   assert.equal(listing.statistics.excluded_directories, 1);
   assert.ok(listing.items.some((item) => item.parse_status === 'FILE_READ_FAILED'));
   assert.equal(listing.items.every((item) => item.sha256.length === 0 || item.sha256.length === 64), true);
+  assert.equal(listing.items.some((item) => item.vault_relative_path === 'Resources/x.md'), false);
   root.entries = originalEntries;
 });
 
-test('Worker 与 Node 适配器对同一 44 篇 fixture 逐字段全等', async () => {
+test('Worker 与 Node 适配器对同一套整库 fixture 逐字段全等', async () => {
   const vault = fileURLToPath(new URL('../fixtures/vault/', import.meta.url));
   const fixedOptions = { scannedAt: '2026-01-01T00:00:00.000Z' };
   async function fixtureDirectory(parts = []) {
@@ -126,13 +128,13 @@ test('Worker 与 Node 适配器对同一 44 篇 fixture 逐字段全等', async 
     async statDirectory(parts) {
       try {
         let directory = root;
-        for (const part of parts) directory = await directory.getDirectoryHandle(part);
+        for (const part of parts) { if (part) directory = await directory.getDirectoryHandle(part); }
         return { kind: 'directory' };
       } catch { return { kind: 'missing' }; }
     },
     async listDirectory(parts) {
       let directory = root;
-      for (const part of parts) directory = await directory.getDirectoryHandle(part);
+      for (const part of parts) { if (part) directory = await directory.getDirectoryHandle(part); }
       const entries = [];
       for await (const [name, handle] of directory.entries()) {
         if (handle.kind === 'directory') entries.push({ name, kind: 'directory' });
@@ -167,9 +169,12 @@ test('Worker 与 Node 适配器对同一 44 篇 fixture 逐字段全等', async 
   const options = { ...fixedOptions, concurrency: 4, workerFactory };
   const browser = await scanVaultWithWorkers(root, { ...options, path: 'fixture-vault' });
   const node = await walkCollect(nodeAdapter, { ...fixedOptions, path: 'fixture-vault' });
-  assert.equal(node.total, 44);
+  // 整库扫描：45 篇 = 2-Permanent 下 44 篇 + 库根 outside-root.md（旧默认只扫 2-Permanent 时为 44）。
+  const fixtureTotal = 45;
+  assert.equal(node.total, fixtureTotal);
   assert.deepEqual(browser, node);
-  assert.equal(browser.total, 44);
+  assert.equal(browser.total, fixtureTotal);
+  assert.equal(node.items.some((item) => item.vault_relative_path === 'outside-root.md'), true);
   assert.equal(node.items.filter((item) => item.parse_status === 'FILE_READ_FAILED').length, 0);
   assert.equal(browser.items.filter((item) => item.parse_status === 'FILE_READ_FAILED').length, 0);
   const first = node.items.find((item) => item.vault_relative_path === '2-Permanent/encoding/08-bom-crlf.md');

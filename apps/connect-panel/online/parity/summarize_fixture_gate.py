@@ -8,6 +8,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# 整库扫描（managed root = '.'）会额外纳入库根级的 outside-root.md：
+# 它位于 Vault 根目录、不属于任何子目录，旧口径（仅 2-Permanent）自然不计。
+# 重新生成评测夹具后必须同步复核该常量，不允许用它掩盖其他差异。
+EXPECTED_ROOT_LEVEL_NOTES = 1
+EXPECTED_TOTAL = 50 + EXPECTED_ROOT_LEVEL_NOTES
+
 
 def read_json(path: Path) -> dict[str, Any]:
     """读取 UTF-8 JSON 对象。"""
@@ -53,12 +59,12 @@ def summarize(reports: Path) -> dict[str, Any]:
         "nist_vector_results": sum(suite["nist_vector_results"] for suite in suites),
         "size_bytes_strict": True,
         "real_vault_full_parity_performed": False,
-        "passed": total == 50,
+        "passed": total == EXPECTED_TOTAL,
     }
 
 
 def main() -> int:
-    """命令行入口；两套套件全绿且总数为 50 才返回零。"""
+    """命令行入口；两套套件全绿且总数符合整库口径才返回零。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--reports", type=Path, default=Path(__file__).resolve().parent / "reports")
     parser.add_argument("--out", type=Path, required=True)

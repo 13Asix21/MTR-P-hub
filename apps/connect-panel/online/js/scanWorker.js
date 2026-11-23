@@ -115,8 +115,10 @@ export async function scanVaultWithWorkers(root, options = {}) {
     } finally { worker.terminate(); }
   }
   await Promise.all(Array.from({ length: count }, consume));
+  // 与 walkCollect 一致：库根必须回写成 '.'，否则会被归一成非法空路径。
+  const managedRoots = managed.map((parts) => (parts.length === 0 ? '.' : parts.join('/')));
   return collectListing(facts, skips.filter((event) => event.kind !== 'file_too_large_metadata'), {
-    managedRoots: managed.map((parts) => parts.join('/')),
+    managedRoots,
     excludedRoots: excluded.map((parts) => parts.join('/')),
     path: root.name,
     scannedAt: options.scannedAt,

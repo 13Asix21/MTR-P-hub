@@ -18,7 +18,7 @@ export async function pickOnlyReadDirectory() {
     throw new DirectoryAccessError('UNSUPPORTED_BROWSER', '本工具依赖 Chromium 的 File System Access API，请使用 Chrome 或 Edge 108 及以上版本打开。');
   }
   if (globalThis.navigator.userActivation && !globalThis.navigator.userActivation.isActive) {
-    throw new DirectoryAccessError('DIRECTORY_NOT_AUTHORIZED', '请点击按钮后选择 Vault 文件夹。');
+    throw new DirectoryAccessError('DIRECTORY_NOT_AUTHORIZED', '请点击按钮后选择 Obsidian 库文件夹。');
   }
   let handle;
   try {
@@ -31,14 +31,13 @@ export async function pickOnlyReadDirectory() {
   return handle;
 }
 
+/**
+ * 只校验「是一个可遍历的目录」，不要求库里有某个固定子目录。
+ * PARA、Zettelkasten、扁平、仅中文目录等 Obsidian 库结构都应被接受。
+ */
 export async function validateVaultRoot(handle) {
-  if (!handle || handle.kind !== 'directory' || typeof handle.getDirectoryHandle !== 'function') {
-    throw new DirectoryAccessError('VAULT_ROOT_INVALID', '请选择 Vault 根目录。');
-  }
-  try {
-    await handle.getDirectoryHandle('2-Permanent', { create: false });
-  } catch {
-    throw new DirectoryAccessError('VAULT_ROOT_INVALID', '未找到 2-Permanent，请重新选择 Vault 根目录。');
+  if (!handle || handle.kind !== 'directory' || typeof handle.getDirectoryHandle !== 'function' || typeof handle.entries !== 'function') {
+    throw new DirectoryAccessError('VAULT_ROOT_INVALID', '请选择 Obsidian 库文件夹（库的根目录）。');
   }
   return handle;
 }

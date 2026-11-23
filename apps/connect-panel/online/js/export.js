@@ -35,7 +35,9 @@ export function exportCsv(items) {
 }
 
 export async function onlineVaultId(vaultRoot, listing) {
-  const input = new TextEncoder().encode(`${vaultRoot}|2-Permanent|${listing.total}`);
+  // 用实际扫描根生成库标识，兼容整库（`.`）与自定义多根，不再固定拼 2-Permanent。
+  const roots = (listing.managed_roots ?? []).join(',') || '.';
+  const input = new TextEncoder().encode(`${vaultRoot}|${roots}|${listing.total}`);
   return (await sha256Bytes(input)).slice(0, 16);
 }
 

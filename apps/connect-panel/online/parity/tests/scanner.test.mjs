@@ -21,7 +21,9 @@ const manifest = JSON.parse(await readFile(new URL('../fixtures/fixtures_manifes
 
 test('确定性 fixture 树覆盖全部 34 类及 12 个 INVALID_YAML', async () => {
   const report = await runJs(fixtureVault);
-  assert.equal(report.listing.total, manifest.expected_managed_markdown);
+  // 整库扫描会在受管 44 篇之外，再纳入一次库根级的 outside-root.md。
+  assert.equal(report.listing.total, manifest.expected_managed_markdown + 1);
+  assert.equal(report.listing.items.some((item) => item.vault_relative_path === 'outside-root.md'), true);
   assert.equal(report.listing.total, report.listing.statistics.scanned_files);
   assert.equal(report.listing.counts.parsed_ok, report.listing.statistics.parsed_files);
   assert.equal(report.listing.counts.invalid, report.listing.statistics.error_count);
@@ -67,7 +69,7 @@ test('扫描计数统计完整 11 键、链接全路径优先与 basename 唯一
 test('maxScanFiles 截断仍给出完整同构统计', async () => {
   const adapter = {
     statDirectory: async () => ({ kind: 'directory' }),
-    listDirectory: async (parts) => parts.length === 1 ? [{ name: 'a.md', kind: 'file', size: 1 }, { name: 'b.md', kind: 'file', size: 1 }] : [],
+    listDirectory: async (parts) => parts.length === 0 ? [{ name: 'a.md', kind: 'file', size: 1 }, { name: 'b.md', kind: 'file', size: 1 }] : [],
     readBytes: async () => new TextEncoder().encode('x'),
   };
   const listing = await walkCollect(adapter, { maxScanFiles: 1 });
@@ -75,6 +77,26 @@ test('maxScanFiles 截断仍给出完整同构统计', async () => {
   assert.equal(listing.limit_reached, true);
   assert.equal(listing.status, 'limited');
   assert.equal(listing.statistics.limit_reached, true);
+  // 库根统一以 '.' 表示：'.' 归一化为「从库根开始」而不是字面目录名。
+  assert.deepEqual([...listing.managed_roots], ['.']);
+});
+
+test('兼容任意 Obsidian 库结构：递归多层子目录且不要求 2-Permanent', async () => {
+  const tree = {
+    '': [{ name: '笔记.md', kind: 'file', size: 5 }, { name: 'Inbox', kind: 'directory' }, { name: '.obsidian', kind: 'directory' }, { name: '.trash', kind: 'directory' }],
+    Inbox: [{ name: '想法', kind: 'directory' }, { name: '收集.md', kind: 'file', size: 5 }],
+    'Inbox/想法': [{ name: '深度.md', kind: 'file', size: 5 }],
+    '.obsidian': [{ name: 'app.json', kind: 'file', size: 3 }],
+    '.trash': [{ name: '旧.md', kind: 'file', size: 5 }],
+  };
+  const adapter = {
+    statDirectory: async (parts) => (parts.length === 0 || Object.hasOwn(tree, parts.join('/')) ? { kind: 'directory' } : { kind: 'missing' }),
+    listDirectory: async (parts) => tree[parts.join('/')] ?? [],
+    readBytes: async () => new TextEncoder().encode('---\ntags: [mtr/trial]\n---\n正文'),
+  };
+  const listing = await walkCollect(adapter, {});
+  assert.deepEqual(listing.items.map((item) => item.vault_relative_path).sort(), ['Inbox/想法/深度.md', 'Inbox/收集.md', '笔记.md']);
+  assert.equal(listing.items.some((item) => item.vault_relative_path.startsWith('.')), false);
 });
 
 test('casefold 处理架构指定 ß/İ 与连字边界', () => {

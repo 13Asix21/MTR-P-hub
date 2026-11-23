@@ -68,6 +68,9 @@ def _normalise_root(raw_root: str, field: str) -> tuple[str, ...]:
     if not isinstance(raw_root, str) or not raw_root.strip():
         raise PanelError("ROOT_INVALID", f"{field} 中存在空路径。")
     value = raw_root.strip().replace("\\", "/").rstrip("/")
+    # '.' 表示库根目录本身，与前端 scanner 的约定一致；其余位置的点仍按穿越拒绝。
+    if value == ".":
+        return ()
     if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value) or Path(value).is_absolute():
         raise PanelError("ROOT_MUST_BE_RELATIVE", f"{field} 必须是 Vault 内的相对路径。")
     if ":" in value:

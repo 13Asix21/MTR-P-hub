@@ -32,7 +32,15 @@ from panel.review_store import (
 )
 from panel.settings import ObsidianConfig, PanelError
 
-EXCLUDED_ROOTS = ["2-Permanent/Resources/MTR-P-System", "2-Permanent/Areas/AI-Assets/_templates"]
+EXCLUDED_ROOTS = [
+    ".obsidian",
+    ".trash",
+    ".git",
+    ".github",
+    ".obsidian-git",
+    "2-Permanent/Resources/MTR-P-System",
+    "2-Permanent/Areas/AI-Assets/_templates",
+]
 
 
 def error_dict(error: PanelError) -> dict[str, Any]:
@@ -121,7 +129,8 @@ def nist_vectors() -> list[dict[str, str | int]]:
 
 def run(vault: Path) -> dict[str, Any]:
     config = ObsidianConfig(
-        vault_root=str(vault), managed_roots=("2-Permanent",), excluded_roots=tuple(EXCLUDED_ROOTS),
+        # 与前端一致：扫描整个库根（'.' 由 panel 适配器归一化为库根），而不是只扫单一 PARA 目录。
+        vault_root=str(vault), managed_roots=(".",), excluded_roots=tuple(EXCLUDED_ROOTS),
         max_file_bytes=1_048_576, max_scan_files=5000,
     )
     listing = scan_review_listing(str(vault), config)

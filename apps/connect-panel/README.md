@@ -2,6 +2,8 @@
 
 这是位于 `apps/connect-panel/` 的独立本地面板，用来加载主仓配置，对 M / T / R / P 四库做能力边界明确的连接校验，并提供 Vault 进入 M 库前的人工审核工作台。后端使用 FastAPI，前端是零 CDN、零 npm、零构建步骤的单文件 HTML。审核工作台只产生审核台账与放行清单，不执行发布。
 
+**扫描范围**：默认递归遍历整个 Obsidian 库（`panel/settings.py` 的 managed roots 为 `.`），兼容 PARA、Zettelkasten、扁平与纯中文目录结构，不要求库内存在 `2-Permanent`；`.obsidian`、`.trash`、`.git` 等隐藏目录与链接、junction 不跟随。如需只看某几个子目录，可在 `stage2.yaml` 的 `managed_roots` 显式列出。
+
 ## 双形态交付契约（当前实测）
 
 | 形态 | 当前交付 | 台账与边界 | 已验收证据 |

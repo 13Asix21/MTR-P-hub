@@ -9,8 +9,17 @@ import {
   splitLines,
 } from './parser.js';
 
-export const DEFAULT_MANAGED_ROOTS = Object.freeze(['2-Permanent']);
+/**
+ * 默认扫描整个 Obsidian 库根目录（`.`）。各类 Para / Zettelkasten / 扁平结构都能兼容，
+ * 不再假定 `2-Permanent` 这一类单一目录名。
+ */
+export const DEFAULT_MANAGED_ROOTS = Object.freeze(['.']);
 export const DEFAULT_EXCLUDED_ROOTS = Object.freeze([
+  '.obsidian',
+  '.trash',
+  '.git',
+  '.github',
+  '.obsidian-git',
   '2-Permanent/Resources/MTR-P-System',
   '2-Permanent/Areas/AI-Assets/_templates',
 ]);
@@ -35,6 +44,8 @@ export function normalizeRoot(rawRoot, field) {
     throw new ScanError('ROOT_INVALID', `${field} 中存在空路径。`);
   }
   const value = rawRoot.trim().replaceAll('\\', '/').replace(/\/+$/u, '');
+  // '.' 表示库根目录本身，是唯一合法的「整库」写法；其他位置的点仍按穿越拒绝。
+  if (value === '.') return [];
   if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//u.test(value) || value.startsWith('/')) {
     throw new ScanError('ROOT_MUST_BE_RELATIVE', `${field} 必须是 Vault 内的相对路径。`);
   }
@@ -216,8 +227,11 @@ export function resolveLinks(items) {
 
 /** 单遍事实收集：statistics 与 items 由同一份 scanned fact 同时派生。 */
 export function collectListing(facts, skipEvents = [], options = {}) {
-  const managedRoots = options.managedRoots ?? DEFAULT_MANAGED_ROOTS;
-  const excludedRoots = options.excludedRoots ?? DEFAULT_EXCLUDED_ROOTS;
+  // 与 walkCollect 共用同一归一语义：'.' 回写成 '.'，避免整库模式漏成空串。
+  const managedRoots = normalizeRoots(options.managedRoots ?? DEFAULT_MANAGED_ROOTS, 'managed_roots')
+    .map((parts) => (parts.length === 0 ? '.' : parts.join('/')));
+  const excludedRoots = normalizeRoots(options.excludedRoots ?? DEFAULT_EXCLUDED_ROOTS, 'excluded_roots')
+    .map((parts) => parts.join('/'));
   const statistics = newStatistics();
   const items = [];
   const sourcePaths = {};
@@ -300,7 +314,8 @@ export async function scanFileBytes(relativePath, rawBytes, metadata = {}) {
 export async function walkCollect(adapter, options = {}) {
   const managed = normalizeRoots(options.managedRoots ?? DEFAULT_MANAGED_ROOTS, 'managed_roots');
   const excluded = normalizeRoots(options.excludedRoots ?? DEFAULT_EXCLUDED_ROOTS, 'excluded_roots');
-  const managedRoots = managed.map((parts) => parts.join('/'));
+  // 库根用 '.' 回写，与 Python 参考引擎的 managed_roots 表示保持一致。
+  const managedRoots = managed.map((parts) => (parts.length === 0 ? '.' : parts.join('/')));
   const excludedRoots = excluded.map((parts) => parts.join('/'));
   const maxScanFiles = options.maxScanFiles ?? MAX_SCAN_FILES;
   const facts = [];

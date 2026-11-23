@@ -12,7 +12,13 @@ const isDefault = vault === path.join(parityDir, 'fixtures', 'vault');
 const manifest = JSON.parse(await readFile(path.join(parityDir, 'fixtures', 'fixtures_manifest.json'), 'utf8'));
 const isStage2 = vault === path.join(root, 'tests', 'fixtures', 'stage2', 'vault');
 const fixtureName = isDefault ? 'synthetic-extended' : isStage2 ? 'stage2-read-only' : 'custom-fixture';
-const expected = isDefault ? manifest.expected_managed_markdown : isStage2 ? manifest.expected_stage2_managed_markdown : manifest.expected_combined_fixture_count;
+// 整库扫描会额外纳入库根级的 outside-root.md；stage2 夹具没有该文件，因此不加。
+const extraRootLevelNotes = 1;
+const expected = isDefault
+  ? manifest.expected_managed_markdown + extraRootLevelNotes
+  : isStage2
+    ? manifest.expected_stage2_managed_markdown
+    : manifest.expected_combined_fixture_count;
 if (!isDefault && !isStage2) throw new Error('第一关只允许 synthetic-extended 或 stage2 fixture，不接受真实 Vault 路径。');
 
 function execute(command, args) {

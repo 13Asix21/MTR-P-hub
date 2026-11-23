@@ -28,7 +28,8 @@ class ObsidianConfig:
     """Obsidian T/R 视图的只读扫描配置。"""
 
     vault_root: str = ""
-    managed_roots: tuple[str, ...] = ("2-Permanent",)
+    # '.' 表示整库扫描（交由 vault_check 归一化为库根），兼容 PARA / Zettelkasten / 扁平结构。
+    managed_roots: tuple[str, ...] = (".",)
     excluded_roots: tuple[str, ...] = ()
     trial_tag: str = "mtr/trial"
     rarely_tag: str = "mtr/rarely"
@@ -121,7 +122,7 @@ def _integer(value: Any, default: int, minimum: int, maximum: int) -> int:
 
 def _managed_root_paths(value: Any) -> tuple[str, ...]:
     if not isinstance(value, list):
-        return ("2-Permanent",)
+        return (".",)
     roots: list[str] = []
     for item in value:
         if isinstance(item, dict):
@@ -130,7 +131,7 @@ def _managed_root_paths(value: Any) -> tuple[str, ...]:
             candidate = _string(item)
         if candidate:
             roots.append(candidate)
-    return tuple(roots) or ("2-Permanent",)
+    return tuple(roots) or (".",)
 
 
 def _string_tuple(value: Any) -> tuple[str, ...]:

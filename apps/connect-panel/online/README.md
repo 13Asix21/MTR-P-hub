@@ -2,7 +2,7 @@
 
 ## 当前交付边界
 
-本目录是零构建、无运行时 CDN 的静态浏览器审核工作台。用户主动授权一个本地目录后，页面只读扫描 `2-Permanent` 等 managed roots 内的 Markdown，支持筛选、原文详情、通过/拒绝/跳过/撤销、理由、快捷键、单批不超过 500 篇，以及 JSON+CSV 浏览器下载。
+本目录是零构建、无运行时 CDN 的静态浏览器审核工作台。用户主动授权一个本地目录后，页面**递归只读扫描整个 Obsidian 库**内所有子文件夹的 Markdown（默认整库，兼容 PARA、Zettelkasten、扁平与纯中文结构），支持筛选、原文详情、通过/拒绝/跳过/撤销、理由、快捷键、单批不超过 500 篇，以及 JSON+CSV 浏览器下载。`.obsidian`、`.trash`、`.git`、`.github`、`.obsidian-git` 自动排除。不再要求库内存在 `2-Permanent`。
 
 **“在线版”指静态页面形态，不代表账号或云同步。** 当前身份只有“本地浏览器档案”；审核记录、目录句柄和导出备份只保存在当前 Origin 的 IndexedDB。没有 Auth、跨设备同步、云台账、云 SDK、服务端扫描或自动发布。审核不会改写 Vault 原文。
 
@@ -30,7 +30,7 @@ https://mtrp-review-workbench.app.workbuddy.host/?sharecode=R6JHCUP2WX
 
 不要用普通的 `python -m http.server` 替代：部分 Python/Windows 环境会把 `.mjs` 返回为 `text/plain`，导致浏览器拒绝加载 ES module，页面停在“正在检查浏览器目录读取能力”。`serve.py` 固定监听 `127.0.0.1`，并设置 `.js/.mjs/.webmanifest/.css/.svg/.png` 的正确 Content-Type。
 
-当前实测环境使用本机 Chrome；Edge 等具备 File System Access API 的桌面浏览器尚未单独验收。打开 `http://127.0.0.1:8080/`，点击“选择 Vault 目录”并在 Chrome 授权对话框中选择所需 Vault，授予**只读**访问。选错目录、取消授权或权限失效时不要继续审核，按页面提示重新选择。其他浏览器应显示能力边界，不以模拟句柄冒充可用。键盘焦点不在输入框时，J/K 导航，A/R/S 审核，U 撤销。
+当前实测环境使用本机 Chrome；Edge 等具备 File System Access API 的桌面浏览器尚未单独验收。打开 `http://127.0.0.1:8080/`，点击“选择 Obsidian 库文件夹”，在 Chrome 授权对话框中选择库的**根目录**（含 `.obsidian` 的那一层），授予**只读**访问。选错目录、取消授权或权限失效时不要继续审核，按页面提示重新选择。其他浏览器应显示能力边界，不以模拟句柄冒充可用。键盘焦点不在输入框时，J/K 导航，A/R/S 审核，U 撤销。
 
 - 每次审核和撤销都会现读文件字节并计算 SHA-256；详情之后内容变化会拒绝旧 SHA 操作，已读队列不会被清空。
 - `INVALID_YAML` 仍进入分母，允许人工查看只读原文并审核。
