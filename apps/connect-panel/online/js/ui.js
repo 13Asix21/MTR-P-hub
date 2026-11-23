@@ -1,8 +1,8 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123e';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123e';
-import { downloadExportPair } from './export.js?v=20261123e';
-import { renderNotePreview } from './markdownPreview.js?v=20261123e';
-import { transferApprovedNote } from './transfer.js?v=20261123e';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261123f';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261123f';
+import { downloadExportPair } from './export.js?v=20261123f';
+import { renderNotePreview } from './markdownPreview.js?v=20261123f';
+import { transferApprovedNote } from './transfer.js?v=20261123f';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -185,7 +185,7 @@ export class WorkbenchUi {
     const wrap = element(this.document, 'div', '', 'settings-entry');
     wrap.setAttribute('aria-label', '在线设置');
     const open = button(this.document, '在线设置 · 我的库连接', 'secondary-button', async () => {
-      const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123e');
+      const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261123f');
       if (!this.settingsPanel) {
         this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
       }
@@ -195,7 +195,7 @@ export class WorkbenchUi {
     });
     open.id = 'open-settings';
     const explain = button(this.document, '看看流转说明', 'secondary-button', async () => {
-      const { FlowExplainer } = await import('./flowExplainer.js?v=20261123e');
+      const { FlowExplainer } = await import('./flowExplainer.js?v=20261123f');
       this.flowHost = element(this.document, 'div', '', 'settings-host');
       wrap.append(this.flowHost);
       const mConfig = await this.loadMLibraryConfig();
@@ -217,13 +217,14 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261123e');
-      const { loadConnections } = await import('./librarySettings.js?v=20261123e');
-      const { currentSession } = await import('./cloudClient.js?v=20261123e');
+      const { getCloud } = await import('./cloudClient.js?v=20261123f');
+      const { loadConnections } = await import('./librarySettings.js?v=20261123f');
+      const { currentSession } = await import('./cloudClient.js?v=20261123f');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
       const map = await loadConnections(await getCloud());
+      this.tLibraryConfig = map.t?.config ?? null;
       return map.m?.config ?? null;
     } catch {
       return null;
@@ -254,6 +255,8 @@ export class WorkbenchUi {
     if (!this.offlineAvailable) await this.prepareRestore();
     if (!this.offlineAvailable) throw new Error('本机离线台账不可用，无法开始审核。请检查浏览器存储权限。');
     this.adapter = await this.services.createAdapter(handle);
+    // 先取云端配置再扫描，保证 T 库的目录设置真正生效；未登录或失败时按整库回退。
+    await this.ensureTransferConfig();
     const main = this.root.querySelector('main');
     main?.replaceChildren();
     const progress = element(this.document, 'progress', '', 'scan-progress');
@@ -265,10 +268,16 @@ export class WorkbenchUi {
     this.abortController = new AbortController();
     main?.append(element(this.document, 'h1', `已授权：${handle.name}`), progress, this.notice, cancel);
     try {
-      this.listing = await this.services.scan(handle, {
+      // 用户在「在线设置」里填写的 T 库目录会真正参与扫描；未配置时按整库。
+      const scanOptions = {
         signal: this.abortController.signal,
         onProgress: ({ scanned, currentDirectory }) => { this.setNotice(`已扫描 ${scanned} 篇 / 当前目录 ${currentDirectory || '库根目录'}`); },
-      });
+      };
+      const roots = [];
+      if (this.tLibraryConfig?.vault_root) roots.push(this.tLibraryConfig.vault_root);
+      for (const extra of this.tLibraryConfig?.managed_roots ?? []) roots.push(extra);
+      if (roots.length > 0) scanOptions.managedRoots = roots;
+      this.listing = await this.services.scan(handle, scanOptions);
       this.vaultId = await this.services.vaultId(handle.name, this.listing);
       this.state = await this.services.offlineBuffer.replayPending({ userId: 'local-browser', vaultId: this.vaultId });
       this.actionService = this.services.createActionService({

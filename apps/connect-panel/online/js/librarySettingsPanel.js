@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123e';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123f';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -12,7 +12,7 @@ import {
   normalizeConfig,
   probeGithub,
   saveConnection,
-} from './librarySettings.js?v=20261123e';
+} from './librarySettings.js?v=20261123f';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
