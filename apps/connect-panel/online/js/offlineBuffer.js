@@ -1,4 +1,4 @@
-import { decide, emptyState, reset, reviewPath, validateState } from './reviewDomain.js?v=20261123s';
+import { decide, emptyState, reset, reviewPath, validateState } from './reviewDomain.js?v=20261124c';
 
 export const OFFLINE_DATABASE_NAME = 'mtrp-online-workbench';
 export const OFFLINE_DATABASE_VERSION = 1;

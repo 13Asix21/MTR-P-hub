@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js?v=20261123s';
+import { LIBRARIES } from './cloudClient.js?v=20261124c';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
@@ -127,22 +127,19 @@ export function readGithubToken() {
 export async function checkGithubAccess(config, fetcher = globalThis.fetch) {
   const proxy = (config?.proxy_url ?? '').replace(/\/+$/u, '');
   const sharecode = config?.sharecode ?? '';
-  const token = readGithubToken();
-  if (proxy && sharecode) {
-    const url = `${proxy}/mtrp/github-check?sharecode=${encodeURIComponent(sharecode)}&owner=${encodeURIComponent(config.owner ?? '')}&repo=${encodeURIComponent(config.repo ?? '')}`;
-    const response = await fetcher(url, { headers: { accept: 'application/json', ...(token ? { 'x-mtrp-github-token': token } : {}) } });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.ok) throw new LibraryConfigError('GITHUB_CHECK_FAILED', payload?.message ?? `检查失败（HTTP ${response.status}）。`);
-    return payload;
+  // GitHub 已改为经官方 MCP 服务访问，必须走代理；不再保留匿名 REST 兜底。
+  if (!proxy || !sharecode) {
+    throw new LibraryConfigError(
+      'GITHUB_PROXY_REQUIRED',
+      'GitHub 现通过官方 MCP 服务连接，需在「高级设置」填写代理地址与访问码。',
+    );
   }
-  // 没有代理时只能做匿名读取
-  const info = await probeGithub(config, fetcher);
-  return {
-    ok: true,
-    writable: false,
-    can_push: false,
-    message: `只读：${info.full_name}（未配置代理，无法验证写入权限）`,
-  };
+  const token = readGithubToken();
+  const url = `${proxy}/mtrp/github-check?sharecode=${encodeURIComponent(sharecode)}&owner=${encodeURIComponent(config.owner ?? '')}&repo=${encodeURIComponent(config.repo ?? '')}`;
+  const response = await fetcher(url, { headers: { accept: 'application/json', ...(token ? { 'x-mtrp-github-token': token } : {}) } });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) throw new LibraryConfigError('GITHUB_CHECK_FAILED', payload?.message ?? `检查失败（HTTP ${response.status}）。`);
+  return payload;
 }
 
 /** 数据库行 → 面板可用对象。 */
@@ -269,4 +266,24 @@ export async function testAgent(config, fetcher = globalThis.fetch) {
     throw new LibraryConfigError('AGENT_FAILED', payload?.message ?? `Agent 检查失败（HTTP ${response.status}）。`);
   }
   return { ok: true, message: payload.message, detail: payload };
+}
+
+/** 经代理 MCP 列出当前 token 可访问的全部仓库（含私有）。 */
+export async function listGithubRepos(config, fetcher = globalThis.fetch) {
+  const proxy = (config?.proxy_url ?? '').replace(/\/+$/u, '');
+  const sharecode = config?.sharecode ?? '';
+  if (!proxy || !sharecode) {
+    throw new LibraryConfigError('GITHUB_PROXY_REQUIRED', '请先在高级设置填写代理地址与访问码。');
+  }
+  const token = readGithubToken();
+  if (!token) {
+    throw new LibraryConfigError('GITHUB_TOKEN_REQUIRED', '请在高级设置填写 GitHub Token，否则无法列出私有仓库。');
+  }
+  const url = `${proxy}/mtrp/github-repos?sharecode=${encodeURIComponent(sharecode)}`;
+  const response = await fetcher(url, { headers: { accept: 'application/json', 'x-mtrp-github-token': token } });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new LibraryConfigError('GITHUB_LIST_FAILED', payload?.message ?? `读取仓库失败（HTTP ${response.status}）。`);
+  }
+  return payload;
 }

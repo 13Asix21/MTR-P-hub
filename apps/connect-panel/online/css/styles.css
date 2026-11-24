@@ -326,3 +326,7 @@ textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline:
 .sheet-table td { border: 1px solid #dbe2de; padding: 4px 8px; white-space: nowrap; }
 .sheet-table tr:first-child td { background: #f3f6f4; font-weight: 600; }
 .preview-only-badge { font-size: 12px; color: #8a5a12; background: #fbf3e2; border-radius: 6px; padding: 4px 10px; align-self: center; }
+
+/* GitHub 仓库选择器 */
+.repo-picker { border-top: 1px dashed var(--line, #d7ded8); padding-top: 8px; margin-top: 4px; }
+.repo-picker .settings-paster-row { margin-top: 0; }

@@ -18,7 +18,7 @@ test('P 库默认值只需一个 repo', () => {
 
 test('P 库把 owner/repo 合并成一格再拆回', () => {
   const config = buildConfig('p', { repo: '13Asix21/MTR-P-hub', branch: 'main', proxy_url: '' });
-  assert.deepEqual(config, { owner: '13Asix21', repo: 'MTR-P-hub', branch: 'main', proxy_url: '' });
+  assert.deepEqual(config, { owner: '13Asix21', repo: 'MTR-P-hub', branch: 'main', proxy_url: '', sharecode: '' });
   const back = toFormValues('p', config);
   assert.equal(back.repo, '13Asix21/MTR-P-hub');
 });

@@ -41,6 +41,7 @@ def load_dotenv(path: Path | None = None) -> None:
 load_dotenv()
 
 LEXIANG_ENDPOINT = os.environ.get("MTRP_LEXIANG_ENDPOINT", "https://mcp.lexiang-app.com/mcp")
+GITHUB_MCP_ENDPOINT = os.environ.get("MTRP_GITHUB_MCP_ENDPOINT", "https://api.githubcopilot.com/mcp/")
 MAX_BODY_BYTES = 2 * 1024 * 1024
 ALLOWED_ORIGINS = os.environ.get(
     "MTRP_ALLOWED_ORIGINS",
@@ -210,6 +211,11 @@ async def transfer(req: TransferRequest, token: str) -> dict[str, Any]:
 
 
 def _select_opener(auth: dict[str, str]):
+    """乐享连接入口（保留原调用点）。"""
+    return _select_opener_at(LEXIANG_ENDPOINT, auth)
+
+
+def _select_opener_at(endpoint: str, auth: dict[str, str]):
     """按部署环境的 mcp 版本选择连接方式，并注入 Authorization 头。
 
     已探测到的形态：
@@ -223,7 +229,7 @@ def _select_opener(auth: dict[str, str]):
         from mcp.client.streamable_http import streamablehttp_client
         params = inspect.signature(streamablehttp_client).parameters
         if "headers" in params:
-            return lambda: streamablehttp_client(LEXIANG_ENDPOINT, headers=auth)
+            return lambda: streamablehttp_client(endpoint, headers=auth)
     except ImportError:
         pass
 
@@ -231,10 +237,10 @@ def _select_opener(auth: dict[str, str]):
 
     params = inspect.signature(streamable_http_client).parameters
     if "http_client" in params:
-        return lambda: streamable_http_client(LEXIANG_ENDPOINT, http_client=_async_client(auth))
+        return lambda: streamable_http_client(endpoint, http_client=_async_client(auth))
     if "httpx_client_factory" in params:
-        return lambda: streamable_http_client(LEXIANG_ENDPOINT, httpx_client_factory=lambda **kw: _async_client(auth, kw))
-    return lambda: streamable_http_client(LEXIANG_ENDPOINT)
+        return lambda: streamable_http_client(endpoint, httpx_client_factory=lambda **kw: _async_client(auth, kw))
+    return lambda: streamable_http_client(endpoint)
 
 
 def _async_client(auth: dict[str, str], options: dict[str, Any] | None = None):
@@ -315,78 +321,169 @@ def agent_check() -> dict[str, Any]:
     return {"ok": True, "model": model_used, "message": f"Agent 可用：{model_used}"}
 
 
-def _github_headers(pat: str) -> dict[str, str]:
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "mtrp-proxy"}
-    if pat:
-        headers["Authorization"] = f"Bearer {pat}"
-    return headers
+# ---------------------------------------------------------------- GitHub MCP
+# GitHub 改为全部经官方 MCP 服务（api.githubcopilot.com/mcp），不再直连 REST。
+# 这样与乐享保持同一套调用形态，也为后续 M→P 路由复用同一客户端打底。
 
 
-def github_check(owner: str, repo: str, pat: str) -> dict[str, Any]:
-    """探查仓库是否可写：读取 permissions，并判断这把 token 能否 push。"""
-    import json as _json
-    import urllib.error
-    import urllib.request
+def _github_opener(token: str):
+    """构造 GitHub MCP 连接；复用 _select_opener，仅换端点与令牌。"""
+    auth = {"Authorization": f"Bearer {token}"}
+    opener = _select_opener_at(GITHUB_MCP_ENDPOINT, auth)
+    return opener
 
+
+async def github_mcp_call(tool: str, arguments: dict[str, Any], token: str) -> dict[str, Any]:
+    """调用 GitHub MCP 工具，返回解析后的结果文本。"""
+    from mcp import ClientSession
+
+    async with _github_opener(token)() as streams:
+        read, write = streams[0], streams[1]
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(tool, arguments=arguments)
+            text = _text(result)
+            if getattr(result, "isError", False):
+                raise TransferError(502, "GITHUB_MCP_ERROR", text[:200] or f"{tool} 调用失败")
+            return {"tool": tool, "text": text}
+
+
+def github_token(explicit: str = "") -> str:
+    """令牌来源：请求头 > 代理 .env。缺失就明确报错，不降级为匿名。"""
+    token = (explicit or os.environ.get("MTRP_GITHUB_TOKEN", "")).strip()
+    if not token:
+        raise TransferError(
+            503, "GITHUB_TOKEN_MISSING",
+            "GitHub 走 MCP 需要 token，请在设置页「高级设置」填写，或在代理 .env 配置 MTRP_GITHUB_TOKEN。",
+        )
+    return token
+
+
+def github_check(owner: str, repo: str, explicit_token: str = "") -> dict[str, Any]:
+    """经 MCP 探查仓库：存在性、可见性、默认分支。"""
     if not owner or not repo:
         raise TransferError(400, "REPO_REQUIRED", "缺少 owner 或 repo。")
-    request = urllib.request.Request(
-        f"https://api.github.com/repos/{owner}/{repo}", headers=_github_headers(pat), method="GET"
-    )
+    token = github_token(explicit_token)
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            body = _json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        if error.code == 404:
-            raise TransferError(404, "GITHUB_NOT_FOUND", "仓库不存在，或私有仓库缺少有效 token。") from None
-        if error.code == 401:
-            raise TransferError(401, "GITHUB_TOKEN_INVALID", "GitHub token 无效或已过期。") from None
-        if error.code == 403:
-            raise TransferError(
-                403, "GITHUB_RATE_LIMITED",
-                "GitHub 限流：匿名请求额度已用尽，请在高级设置填 GitHub Token 后重试。",
-            ) from None
-        raise TransferError(502, "GITHUB_ERROR", f"GitHub 返回 {error.code}。") from None
-    perms = body.get("permissions") or {}
-    can_push = bool(perms.get("push"))
-    writable = can_push and not body.get("archived", False)
+        payload = asyncio.run(github_mcp_call(
+            "search_repositories", {"query": f"repo:{owner}/{repo}"}, token))
+    except TransferError:
+        raise
+    except Exception as error:
+        raise TransferError(
+            502, "GITHUB_MCP_UNREACHABLE",
+            "GitHub MCP 连接失败：请确认 Token 有效（形如 ghp_ 或 github_pat_ 开头，长度通常 40 位以上）。"
+            f"（{type(error).__name__}）",
+        ) from None
+    import json as _json
+    try:
+        data = _json.loads(payload["text"])
+    except _json.JSONDecodeError:
+        raise TransferError(502, "GITHUB_MCP_INVALID", "GitHub MCP 返回非 JSON。") from None
+    items = data.get("items") or []
+    match = next((item for item in items if str(item.get("full_name", "")).lower() == f"{owner}/{repo}".lower()), None)
+    if not match:
+        raise TransferError(404, "GITHUB_NOT_FOUND", "仓库不存在，或当前 token 无访问权限。")
     return {
         "ok": True,
-        "full_name": body.get("full_name"),
-        "private": bool(body.get("private")),
-        "default_branch": body.get("default_branch"),
-        "can_push": can_push,
-        "writable": writable,
-        "token_used": bool(pat),
+        "transport": "mcp",
+        "full_name": match.get("full_name"),
+        "private": bool(match.get("private")),
+        "default_branch": match.get("default_branch"),
+        "html_url": match.get("html_url"),
+        "pushed_at": match.get("updated_at"),
         "message": (
-            f"可读写：{body.get('full_name')}（{'私有' if body.get('private') else '公开'}，可推送）"
-            if writable else
-            f"只读：{body.get('full_name')}（{'未提供 token' if not pat else 'token 无 push 权限'}，只能读取）"
+            f"连接正常（MCP）：{match.get('full_name')}（{'私有' if match.get('private') else '公开'}）"
         ),
     }
 
 
-def github_scope(pat: str) -> dict[str, Any]:
-    """返回该 token 的身份与权限范围，便于用户判断能否写入。"""
+def github_scope(explicit_token: str = "") -> dict[str, Any]:
+    """经 MCP 查当前 token 对应的账号。"""
+    token = github_token(explicit_token)
+    payload = asyncio.run(github_mcp_call("get_me", {}, token))
     import json as _json
-    import urllib.error
-    import urllib.request
-
-    if not pat:
-        raise TransferError(400, "TOKEN_REQUIRED", "缺少 GitHub token。")
-    request = urllib.request.Request("https://api.github.com/user", headers=_github_headers(pat), method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            body = _json.loads(response.read().decode("utf-8"))
-            scopes = response.headers.get("X-OAuth-Scopes", "")
-    except urllib.error.HTTPError as error:
-        raise TransferError(401, "GITHUB_TOKEN_INVALID", f"GitHub token 无效（{error.code}）。") from None
+        data = _json.loads(payload["text"])
+    except _json.JSONDecodeError:
+        data = {}
+    login = data.get("login") or ""
     return {
         "ok": True,
-        "login": body.get("login"),
-        "scopes": [item.strip() for item in scopes.split(",") if item.strip()],
-        "message": f"Token 属于 {body.get('login')}，权限：{scopes or '未声明'}",
+        "transport": "mcp",
+        "login": login,
+        "message": f"MCP token 属于 {login or '（未知账号）'}",
     }
+
+
+def github_list_repos(explicit_token: str = "", limit: int = 100) -> dict[str, Any]:
+    """经 MCP 列出当前 token 可访问的全部仓库（分页合并）。"""
+    token = github_token(explicit_token)
+    repos: list[dict[str, Any]] = []
+    page = 1
+    while page <= 10 and len(repos) < limit:
+        try:
+            payload = asyncio.run(github_mcp_call(
+                "search_repositories",
+                {"query": "user:@me", "perPage": min(100, limit - len(repos)), "page": page},
+                token,
+            ))
+        except TransferError:
+            raise
+        except Exception as error:
+            raise TransferError(
+                502, "GITHUB_MCP_UNREACHABLE",
+                "GitHub MCP 连接失败：请确认 Token 有效（形如 ghp_ 或 github_pat_ 开头，长度通常 40 位以上）。"
+                f"（{type(error).__name__}）",
+            ) from None
+        import json as _json
+        try:
+            data = _json.loads(payload["text"])
+        except _json.JSONDecodeError:
+            break
+        items = data.get("items") or []
+        if not items:
+            break
+        for item in items:
+            repos.append({
+                "full_name": item.get("full_name"),
+                "private": bool(item.get("private")),
+                "default_branch": item.get("default_branch"),
+                "html_url": item.get("html_url"),
+                "description": item.get("description"),
+                "updated_at": item.get("updated_at"),
+            })
+        if len(items) < 100:
+            break
+        page += 1
+    return {
+        "ok": True,
+        "transport": "mcp",
+        "count": len(repos),
+        "repos": repos,
+        "message": f"经 MCP 读到 {len(repos)} 个仓库",
+    }
+
+
+def github_branches(owner: str, repo: str, explicit_token: str = "") -> dict[str, Any]:
+    """经 MCP 列出仓库分支。"""
+    if not owner or not repo:
+        raise TransferError(400, "REPO_REQUIRED", "缺少 owner 或 repo。")
+    token = github_token(explicit_token)
+    payload = asyncio.run(github_mcp_call("list_branches", {"owner": owner, "repo": repo}, token))
+    return {"ok": True, "transport": "mcp", "owner": owner, "repo": repo, "content": payload["text"]}
+
+
+def github_read_file(owner: str, repo: str, path: str, ref: str = "", explicit_token: str = "") -> dict[str, Any]:
+    """经 MCP 读取文件内容；为后续 M→P 引用补全预留的只读入口。"""
+    if not owner or not repo or not path:
+        raise TransferError(400, "PARAM_REQUIRED", "需要 owner、repo 与 path。")
+    token = github_token(explicit_token)
+    args: dict[str, Any] = {"owner": owner, "repo": repo, "path": path}
+    if ref:
+        args["sha"] = ref
+    payload = asyncio.run(github_mcp_call("get_file_contents", args, token))
+    return {"ok": True, "transport": "mcp", "path": path, "content": payload["text"]}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -454,8 +551,45 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as error:  # pragma: no cover
                 self._send(502, {"ok": False, "code": "GITHUB_FAILED", "message": str(error)[:200]})
             return
+        if self._route() == "/mtrp/github-repos":
+            token = self.headers.get("X-MTRP-GitHub-Token", "").strip()
+            try:
+                self._send(200, github_list_repos(token))
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
+            except Exception as error:  # pragma: no cover
+                self._send(502, {"ok": False, "code": "GITHUB_FAILED", "message": str(error)[:200]})
+            return
+        if self._route() == "/mtrp/github-branches":
+            import urllib.parse
+            query = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            owner = (query.get("owner") or [""])[0].strip()
+            repo = (query.get("repo") or [""])[0].strip()
+            token = self.headers.get("X-MTRP-GitHub-Token", "").strip()
+            try:
+                self._send(200, github_branches(owner, repo, token))
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
+            except Exception as error:  # pragma: no cover
+                self._send(502, {"ok": False, "code": "GITHUB_FAILED", "message": str(error)[:200]})
+            return
+        if self._route() == "/mtrp/github-file":
+            import urllib.parse
+            query = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            owner = (query.get("owner") or [""])[0].strip()
+            repo = (query.get("repo") or [""])[0].strip()
+            path = (query.get("path") or [""])[0].strip()
+            ref = (query.get("ref") or [""])[0].strip()
+            token = self.headers.get("X-MTRP-GitHub-Token", "").strip()
+            try:
+                self._send(200, github_read_file(owner, repo, path, ref, token))
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
+            except Exception as error:  # pragma: no cover
+                self._send(502, {"ok": False, "code": "GITHUB_FAILED", "message": str(error)[:200]})
+            return
         if self._route() == "/mtrp/github-scope":
-            pat = self.headers.get("X-MTRP-GitHub-Token", "").strip() or os.environ.get("MTRP_GITHUB_TOKEN", "").strip()
+            pat = self.headers.get("X-MTRP-GitHub-Token", "").strip()
             try:
                 self._send(200, github_scope(pat))
             except TransferError as error:

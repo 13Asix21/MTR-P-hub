@@ -99,11 +99,12 @@ export const FIELD_HELP = {
     {
       key: 'repo',
       label: 'GitHub 仓库',
-      placeholder: 'owner/repo，例如 13Asix21/MTR-P-hub',
+      placeholder: '先从下拉选择，或直接填 owner/repo',
       required: true,
       defaultValue: '13Asix21/MTR-P-hub',
-      helpText: '直接复制浏览器地址栏 github.com/ 后面那两段。',
-      helpLink: { label: '打开 GitHub 仓库列表', url: 'https://github.com/13Asix21?tab=repositories' },
+      helpText: '点「加载我的仓库」可由 MCP 列出该账号下全部仓库（含私有）。',
+      helpLink: { label: '打开 GitHub 仓库列表', url: 'https://github.com/settings/repositories' },
+      withRepoPicker: true,
     },
     {
       key: 'branch',
@@ -150,10 +151,18 @@ export const ADVANCED_FIELDS = {
     },
     {
       key: 'proxy_url',
-      label: 'GitHub 代理地址（可选）',
-      placeholder: '私有仓库或限流时填写',
-      defaultValue: '',
-      helpText: '公开仓库留空即可，浏览器可直连。',
+      label: 'MTR-P 代理地址（GitHub 经 MCP 访问）',
+      placeholder: 'https://mtrp-lexiang-proxy.app.workbuddy.host',
+      defaultValue: 'https://mtrp-lexiang-proxy.app.workbuddy.host',
+      helpText: 'GitHub 已改为经官方 MCP 服务访问，需通过本代理转发；保持默认即可。',
+      helpLink: { label: '检查代理状态', url: 'https://mtrp-lexiang-proxy.app.workbuddy.host/mtrp/health?sharecode=QOPTB45RQL' },
+    },
+    {
+      key: 'sharecode',
+      label: '代理访问码',
+      placeholder: 'QOPTB45RQL',
+      defaultValue: 'QOPTB45RQL',
+      helpText: '与乐享共用同一个代理，保持默认即可。',
       helpLink: null,
     },
   ],
@@ -189,6 +198,7 @@ export function buildConfig(library, values) {
     repo: (name ?? '').trim(),
     branch: (values.branch ?? '').trim() || 'main',
     proxy_url: (values.proxy_url ?? '').trim(),
+    sharecode: (values.sharecode ?? '').trim(),
   };
 }
 
@@ -209,6 +219,7 @@ export function toFormValues(library, config = {}) {
     repo: owner && repo ? `${owner}/${repo}` : '',
     branch: config.branch ?? 'main',
     proxy_url: config.proxy_url ?? '',
+    sharecode: config.sharecode ?? '',
   };
 }
 

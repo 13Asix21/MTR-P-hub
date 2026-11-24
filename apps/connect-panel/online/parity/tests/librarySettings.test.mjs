@@ -226,3 +226,23 @@ test('有代理时走 github-check 并带回可写性', async () => {
   assert.equal(calls[0].headers['x-mtrp-github-token'], 'ghp_t');
   delete globalThis.localStorage;
 });
+
+test('GitHub 未配代理时明确要求走 MCP 代理，不再匿名兜底', async () => {
+  const { checkGithubAccess } = await import('../../js/librarySettings.js');
+  await assert.rejects(
+    checkGithubAccess({ owner: 'a', repo: 'b', proxy_url: '', sharecode: '' }, async () => { throw new Error('不应发请求'); }),
+    (e) => e.code === 'GITHUB_PROXY_REQUIRED',
+  );
+  await assert.rejects(
+    checkGithubAccess({ owner: 'a', repo: 'b', proxy_url: 'https://p', sharecode: '' }, async () => { throw new Error('不应发请求'); }),
+    (e) => e.code === 'GITHUB_PROXY_REQUIRED',
+  );
+});
+
+test('GitHub 经代理返回 transport=mcp 时透传出来', async () => {
+  const { checkGithubAccess } = await import('../../js/librarySettings.js');
+  const fetcher = async () => ({ ok: true, status: 200, json: async () => ({ ok: true, transport: 'mcp', message: '连接正常（MCP）：a/b' }) });
+  const out = await checkGithubAccess({ owner: 'a', repo: 'b', proxy_url: 'https://p', sharecode: 'SC' }, fetcher);
+  assert.equal(out.transport, 'mcp');
+  assert.match(out.message, /MCP/u);
+});

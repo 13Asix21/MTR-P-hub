@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261123s';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261124c';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -10,10 +10,11 @@ import {
   emptyConfig,
   loadConnections,
   normalizeConfig,
+  listGithubRepos,
   saveConnection,
   testConnection,
-} from './librarySettings.js?v=20261123s';
-import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, extractSpaceId, toFormValues } from './libraryFields.js?v=20261123s';
+} from './librarySettings.js?v=20261124c';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, extractSpaceId, toFormValues } from './libraryFields.js?v=20261124c';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -362,6 +363,52 @@ export class LibrarySettingsPanel {
     return box;
   }
 
+  renderRepoPicker() {
+    const box = el(this.document, 'div', '', 'repo-picker');
+    const row = el(this.document, 'div', '', 'settings-paster-row');
+    const select = el(this.document, 'select', '', 'text-input');
+    select.id = 'p-repo-select';
+    const placeholder = el(this.document, 'option', '点右侧按钮加载，或直接在上方填写');
+    placeholder.value = '';
+    select.append(placeholder);
+    select.addEventListener('change', () => {
+      if (!select.value) return;
+      const repoInput = this.root.querySelector('#lib-p-repo');
+      if (repoInput) {
+        repoInput.value = select.value;
+        this.forms.p.repo = select.value;
+        repoInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      msg.textContent = `已选择：${select.value}`;
+      msg.className = 'field-help settings-ok';
+    });
+    const load = button(this.document, '加载我的仓库', 'secondary-button', async () => {
+      msg.textContent = '正在经 MCP 读取仓库列表…';
+      msg.className = 'field-help';
+      try {
+        const config = buildConfig('p', this.forms.p);
+        const data = await listGithubRepos(config);
+        select.replaceChildren(placeholder);
+        for (const repo of data.repos ?? []) {
+          const opt = el(this.document, 'option', `${repo.full_name}${repo.private ? '（私有）' : ''}`);
+          opt.value = repo.full_name;
+          select.append(opt);
+        }
+        msg.textContent = data.message ?? `共 ${data.count} 个仓库`;
+        msg.className = 'field-help settings-ok';
+      } catch (error) {
+        msg.textContent = error?.message ?? '加载失败。';
+        msg.className = 'field-help settings-error';
+      }
+    });
+    load.id = 'p-load-repos';
+    const msg = el(this.document, 'p', '', 'field-help');
+    row.append(select, load);
+    box.append(row, msg);
+    box.append(el(this.document, 'p', '经 GitHub 官方 MCP 读取，包含私有仓库；切换账号后需重新填写 Token。', 'field-help'));
+    return box;
+  }
+
   renderCard(library) {
     const entry = this.entries[library.id];
     const card = el(this.document, 'section', '', 'settings-card');
@@ -380,6 +427,8 @@ export class LibrarySettingsPanel {
     card.append(fields);
     // 乐享：支持直接粘贴知识库链接自动识别 ID，避免手抄 32 位字符串出错。
     if (library.id === 'm') card.append(this.renderSpaceIdPaster());
+    // GitHub：经 MCP 列出账号下全部仓库，点选即填，不用手抄 owner/repo。
+    if (library.id === 'p') card.append(this.renderRepoPicker());
 
     const advancedFields = ADVANCED_FIELDS[library.id] ?? [];
     if (advancedFields.length > 0) {
@@ -532,7 +581,7 @@ export class LibrarySettingsPanel {
     if (btn) btn.disabled = true;
     host.hidden = false;
     host.replaceChildren();
-    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261123s');
+    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261124c');
     const results = [];
     const render = () => {
       host.replaceChildren();
@@ -552,7 +601,7 @@ export class LibrarySettingsPanel {
       try {
         if (step.id === 'm') {
           entry.message = checkM(this.entries.m?.config).message;
-          const { testConnection } = await import('./librarySettings.js?v=20261123s');
+          const { testConnection } = await import('./librarySettings.js?v=20261124c');
           const r = await testConnection('m', this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
@@ -565,7 +614,7 @@ export class LibrarySettingsPanel {
           const cfg = this.entries.p?.config;
           const chk = checkGithub(cfg);
           if (chk.state === STEP_STATE.ok) {
-            const { checkGithubAccess } = await import('./librarySettings.js?v=20261123s');
+            const { checkGithubAccess } = await import('./librarySettings.js?v=20261124c');
             const r = await checkGithubAccess(cfg);
             entry.message = r.message;
             if (!r.writable) entry.state = STEP_STATE.ok;
@@ -574,7 +623,7 @@ export class LibrarySettingsPanel {
           }
           entry.state = chk.state;
         } else {
-          const { testAgent } = await import('./librarySettings.js?v=20261123s');
+          const { testAgent } = await import('./librarySettings.js?v=20261124c');
           const r = await testAgent(this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
