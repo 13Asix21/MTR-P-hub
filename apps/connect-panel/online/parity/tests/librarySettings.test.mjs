@@ -16,7 +16,7 @@ import {
 test('四库 ID 与空配置齐全', () => {
   assert.deepEqual(LIBRARY_IDS, ['m', 't', 'r', 'p']);
   assert.deepEqual(emptyConfig('t'), { mode: 'local', vault_root: '', mcp_endpoint: '', managed_roots: [], tags: [] });
-  assert.deepEqual(emptyConfig('p'), { owner: '', repo: '', branch: 'main', proxy_url: '' });
+  assert.deepEqual(emptyConfig('p'), { owner: '', repo: '', branch: 'main', proxy_url: '', sharecode: '' });
 });
 
 test('拒绝把 token 等凭据写进云端配置', () => {
@@ -245,4 +245,17 @@ test('GitHub 经代理返回 transport=mcp 时透传出来', async () => {
   const out = await checkGithubAccess({ owner: 'a', repo: 'b', proxy_url: 'https://p', sharecode: 'SC' }, fetcher);
   assert.equal(out.transport, 'mcp');
   assert.match(out.message, /MCP/u);
+});
+
+test('P 库 sharecode 会随配置保存，不被丢弃', () => {
+  const config = normalizeConfig('p', { owner: 'a', repo: 'b', proxy_url: 'https://p', sharecode: 'QOPTB45RQL' });
+  assert.equal(config.sharecode, 'QOPTB45RQL');
+  assert.equal(emptyConfig('p').sharecode, '');
+});
+
+test('P 库 sharecode 格式非法时拒绝', () => {
+  assert.throws(
+    () => normalizeConfig('p', { owner: 'a', repo: 'b', sharecode: 'bad code!' }),
+    (e) => e.code === 'SHARECODE_INVALID',
+  );
 });

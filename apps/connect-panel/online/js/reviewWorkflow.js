@@ -1,4 +1,4 @@
-import { computeProgress, REVIEW_BATCH_MAX_ITEMS } from './reviewDomain.js?v=20261124c';
+import { computeProgress, REVIEW_BATCH_MAX_ITEMS } from './reviewDomain.js?v=20261124f';
 
 /** 统一的批量动作入口；任何单篇失败都不回滚、删除或清空其它已读动作。 */
 export async function applyBatch({ listing, state, paths, action, reason = '', decide, reset }) {

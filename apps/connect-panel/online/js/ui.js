@@ -1,9 +1,10 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261124c';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261124c';
-import { downloadExportPair } from './export.js?v=20261124c';
-import { PREVIEW_KIND, blobUrl, describeDocx, describeXlsx, detectKind, formatSize } from './filePreview.js?v=20261124c';
-import { renderNotePreview } from './markdownPreview.js?v=20261124c';
-import { transferApprovedNote } from './transfer.js?v=20261124c';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261124f';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261124f';
+import { downloadExportPair } from './export.js?v=20261124f';
+import { routeMToP, routeMToPSerial } from './librarySettings.js';
+import { PREVIEW_KIND, blobUrl, describeDocx, describeXlsx, detectKind, formatSize } from './filePreview.js?v=20261124f';
+import { renderNotePreview } from './markdownPreview.js?v=20261124f';
+import { transferApprovedNote } from './transfer.js?v=20261124f';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -198,7 +199,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261124c');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261124f');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -218,7 +219,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261124c');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261124f');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -257,14 +258,15 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261124c');
-      const { loadConnections } = await import('./librarySettings.js?v=20261124c');
-      const { currentSession } = await import('./cloudClient.js?v=20261124c');
+      const { getCloud } = await import('./cloudClient.js?v=20261124f');
+      const { loadConnections } = await import('./librarySettings.js?v=20261124f');
+      const { currentSession } = await import('./cloudClient.js?v=20261124f');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
       const map = await loadConnections(await getCloud());
       this.tLibraryConfig = map.t?.config ?? null;
+      this.pLibraryConfig = map.p?.config ?? null;
       return map.m?.config ?? null;
     } catch {
       return null;
@@ -597,6 +599,7 @@ export class WorkbenchUi {
     if (!this.transferConfigLoaded) this.ensureTransferConfig();
     this.detailPanel.append(this.renderDecisionFlow(item, detail));
     this.detailPanel.append(this.renderSourceViews(detail));
+    this.detailPanel.append(this.renderRoutePanel(item, detail));
   }
 
   /** 结论区：拒绝标识 + 通过后的传送入口。 */
@@ -660,6 +663,117 @@ export class WorkbenchUi {
   }
 
   /** 原文 / 预览双视图；预览只输出安全 HTML。 */
+  /** M→P 路由面板：展开本文引用的 GitHub 文件，或按线索串联检索。 */
+  renderRoutePanel(item, detail) {
+    const wrap = element(this.document, 'details', '', 'route-panel');
+    wrap.append(element(this.document, 'summary', '关联 P 库（GitHub）'));
+    const body = element(this.document, 'div', '', 'route-body');
+    const status = element(this.document, 'p', '', 'route-status');
+    const list = element(this.document, 'div', '', 'route-results');
+
+    const refsBtn = button(this.document, '展开本文的 GitHub 引用', 'secondary-button', async () => {
+      status.textContent = '正在解析引用并取回文件…';
+      status.className = 'route-status';
+      list.replaceChildren();
+      try {
+        // 配置可能尚未加载完（详情先渲染、配置后到），这里主动等一次。
+        if (!this.transferConfigLoaded) await this.ensureTransferConfig();
+        const markdown = detail?.raw_text ?? detail?.body?.text ?? '';
+        const config = this.pLibraryConfig;
+        const result = await routeMToP(markdown, config);
+        status.textContent = result.message ?? '';
+        status.className = result.degraded ? 'route-status is-warn' : 'route-status is-ok';
+        this.renderRouteFiles(list, result.files ?? [], result.missing ?? []);
+      } catch (error) {
+        status.textContent = error?.message ?? '解析失败。';
+        status.className = 'route-status is-warn';
+      }
+    });
+    refsBtn.id = 'route-refs';
+
+    const serialBtn = button(this.document, '按线索检索相关文件', 'secondary-button', async () => {
+      if (!this.transferConfigLoaded) await this.ensureTransferConfig();
+      const coordinate = (this.pLibraryConfig?.owner && this.pLibraryConfig?.repo)
+        ? `${this.pLibraryConfig.owner}/${this.pLibraryConfig.repo}`
+        : '';
+      if (!coordinate) {
+        status.textContent = '请先在「⚙ 库设置」里配置 P 库仓库。';
+        status.className = 'route-status is-warn';
+        return;
+      }
+      status.textContent = '正在仓库目录树中检索…';
+      status.className = 'route-status';
+      list.replaceChildren();
+      try {
+        const markdown = detail?.raw_text ?? detail?.body?.text ?? '';
+        const result = await routeMToPSerial(markdown, coordinate, this.pLibraryConfig);
+        status.textContent = result.message ?? '';
+        status.className = result.degraded ? 'route-status is-warn' : 'route-status is-ok';
+        this.renderRouteHits(list, result.hits ?? [], coordinate);
+      } catch (error) {
+        status.textContent = error?.message ?? '检索失败。';
+        status.className = 'route-status is-warn';
+      }
+    });
+    serialBtn.id = 'route-serial';
+
+    body.append(
+      element(this.document, 'p', '引用补全：只认正文里明确写出的 GitHub 链接或 owner/repo#路径；串联检索：按正文线索在仓库里找相关文件。', 'route-hint'),
+    );
+    const actions = element(this.document, 'div', '', 'route-actions');
+    actions.append(refsBtn, serialBtn);
+    body.append(actions, status, list);
+    wrap.append(body);
+    return wrap;
+  }
+
+  /** 渲染引用补全取回的文件（可展开看正文）。 */
+  renderRouteFiles(host, files, missing) {
+    for (const file of files) {
+      const card = element(this.document, 'details', '', 'route-file');
+      const summary = element(this.document, 'summary', `${file.coordinate} · ${file.path}（${file.chars} 字符）`);
+      const pre = element(this.document, 'pre', file.content ?? '', 'route-content');
+      card.append(summary, pre);
+      host.append(card);
+    }
+    for (const miss of missing) {
+      host.append(element(this.document, 'p', `未取到：${miss.coordinate} · ${miss.path} — ${miss.reason}`, 'route-miss'));
+    }
+    if (!files.length && !missing.length) {
+      host.append(element(this.document, 'p', '正文中没有明确的 GitHub 引用。', 'route-hint'));
+    }
+  }
+
+  /** 渲染串联检索命中的路径。 */
+  renderRouteHits(host, hits, coordinate) {
+    if (!hits.length) {
+      host.append(element(this.document, 'p', '没有匹配到路径。', 'route-hint'));
+      return;
+    }
+    const table = element(this.document, 'table', '', 'route-table');
+    const head = element(this.document, 'thead');
+    const hr = element(this.document, 'tr');
+    for (const label of ['路径', '命中线索', '分', '打开']) hr.append(element(this.document, 'th', label));
+    head.append(hr);
+    const tbody = element(this.document, 'tbody');
+    for (const hit of hits) {
+      const tr = element(this.document, 'tr');
+      tr.append(element(this.document, 'td', hit.path));
+      tr.append(element(this.document, 'td', hit.keyword));
+      tr.append(element(this.document, 'td', String(hit.score)));
+      const linkCell = element(this.document, 'td');
+      const link = element(this.document, 'a', 'GitHub', 'route-link');
+      link.href = `https://github.com/${coordinate}/blob/HEAD/${hit.path}`;
+      link.target = '_blank';
+      link.rel = 'noreferrer noopener';
+      linkCell.append(link);
+      tr.append(linkCell);
+      tbody.append(tr);
+    }
+    table.append(head, tbody);
+    host.append(table);
+  }
+
   renderSourceViews(detail) {
     const wrap = element(this.document, 'section', '', 'source-views');
     const bar = element(this.document, 'div', '', 'view-tabs');

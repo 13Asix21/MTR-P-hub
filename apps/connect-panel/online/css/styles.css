@@ -330,3 +330,39 @@ textarea:focus-visible, pre:focus-visible, .path-button:focus-visible { outline:
 /* GitHub 仓库选择器 */
 .repo-picker { border-top: 1px dashed var(--line, #d7ded8); padding-top: 8px; margin-top: 4px; }
 .repo-picker .settings-paster-row { margin-top: 0; }
+
+/* M→P 路由面板 */
+.route-panel { border: 1px dashed var(--line, #d7ded8); border-radius: 8px; padding: 10px 12px; margin-top: 14px; }
+.route-panel summary { cursor: pointer; font-size: 13px; color: #175d52; font-weight: 600; }
+.route-body { margin-top: 10px; display: grid; gap: 8px; }
+.route-hint { margin: 0; font-size: 12px; color: #6b7570; text-indent: 0; }
+.route-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.route-status { margin: 0; font-size: 13px; min-height: 1em; }
+.route-status.is-ok { color: #175d52; }
+.route-status.is-warn { color: #a3231b; }
+.route-file { border: 1px solid var(--line, #d7ded8); border-radius: 6px; padding: 6px 10px; }
+.route-file summary { cursor: pointer; font-size: 12px; color: #3f4a45; font-weight: 400; }
+.route-content { max-height: 260px; overflow: auto; font-size: 12px; margin: 6px 0 0; background: #f6f8f7; border-radius: 6px; padding: 8px; text-indent: 0; }
+.route-miss { margin: 0; font-size: 12px; color: #a3231b; text-indent: 0; }
+.route-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.route-table th, .route-table td { border: 1px solid #dbe2de; padding: 4px 8px; text-align: left; }
+.route-table th { background: #f3f6f4; }
+.route-link { color: #175d52; }
+
+/* M→P 路由面板 */
+.route-panel { border: 1px dashed var(--line, #d7ded8); border-radius: 8px; padding: 10px 12px; margin-top: 14px; }
+.route-panel summary { cursor: pointer; font-size: 13px; color: #175d52; font-weight: 600; }
+.route-body { margin-top: 10px; display: grid; gap: 8px; }
+.route-hint { margin: 0; font-size: 12px; color: #6b7570; text-indent: 0; }
+.route-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.route-status { margin: 0; font-size: 13px; min-height: 1em; }
+.route-status.is-ok { color: #175d52; }
+.route-status.is-warn { color: #a3231b; }
+.route-file { border: 1px solid var(--line, #d7ded8); border-radius: 6px; padding: 6px 10px; }
+.route-file summary { cursor: pointer; font-size: 12px; color: #3f4a45; font-weight: 400; }
+.route-content { max-height: 260px; overflow: auto; font-size: 12px; margin: 6px 0 0; background: #f6f8f7; border-radius: 6px; padding: 8px; text-indent: 0; }
+.route-miss { margin: 0; font-size: 12px; color: #a3231b; text-indent: 0; }
+.route-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.route-table th, .route-table td { border: 1px solid #dbe2de; padding: 4px 8px; text-align: left; }
+.route-table th { background: #f3f6f4; }
+.route-link { color: #175d52; }

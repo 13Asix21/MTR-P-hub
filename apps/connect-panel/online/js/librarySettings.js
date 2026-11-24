@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js?v=20261124c';
+import { LIBRARIES } from './cloudClient.js?v=20261124f';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
@@ -29,7 +29,7 @@ function str(value) {
 export function emptyConfig(library) {
   if (library === 'm') return { space_id: '', proxy_url: '', path: '', sharecode: '' };
   if (library === 't' || library === 'r') return { mode: 'local', vault_root: '', mcp_endpoint: '', managed_roots: [], tags: [] };
-  if (library === 'p') return { owner: '', repo: '', branch: 'main', proxy_url: '' };
+  if (library === 'p') return { owner: '', repo: '', branch: 'main', proxy_url: '', sharecode: '' };
   throw new LibraryConfigError('LIBRARY_UNKNOWN', `未知库：${library}`);
 }
 
@@ -104,7 +104,12 @@ export function normalizeConfig(library, raw = {}) {
   if (proxyUrl && !/^https?:\/\//u.test(proxyUrl)) {
     throw new LibraryConfigError('PROXY_URL_INVALID', '代理地址必须以 http:// 或 https:// 开头。');
   }
-  return { ...base, owner, repo, branch, proxy_url: proxyUrl };
+  // sharecode 是代理的访问码，与 M 库同样处理：校验格式后随配置保存。
+  const sharecode = str(raw.sharecode);
+  if (sharecode && !/^[A-Za-z0-9_-]{4,64}$/u.test(sharecode)) {
+    throw new LibraryConfigError('SHARECODE_INVALID', 'sharecode 格式不正确。');
+  }
+  return { ...base, owner, repo, branch, proxy_url: proxyUrl, sharecode };
 }
 
 /** GitHub token 单独存本机，不进云端。 */
@@ -284,6 +289,52 @@ export async function listGithubRepos(config, fetcher = globalThis.fetch) {
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {
     throw new LibraryConfigError('GITHUB_LIST_FAILED', payload?.message ?? `读取仓库失败（HTTP ${response.status}）。`);
+  }
+  return payload;
+}
+
+/**
+ * M→P 引用补全：把正文里的 GitHub 引用展开为文件内容。
+ * 走代理的 /mtrp/route-m-to-p，token 只在请求头里出现。
+ */
+export async function routeMToP(markdown, config, fetcher = globalThis.fetch) {
+  const proxy = (config?.proxy_url ?? '').replace(/\/+$/u, '');
+  const sharecode = config?.sharecode ?? '';
+  if (!proxy || !sharecode) {
+    throw new LibraryConfigError('GITHUB_PROXY_REQUIRED', '请先在 P 库高级设置填写代理地址与访问码。');
+  }
+  const token = readGithubToken();
+  const response = await fetcher(`${proxy}/mtrp/route-m-to-p?sharecode=${encodeURIComponent(sharecode)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(token ? { 'x-mtrp-github-token': token } : {}) },
+    body: JSON.stringify({ markdown }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new LibraryConfigError('ROUTE_FAILED', payload?.message ?? `路由失败（HTTP ${response.status}）。`);
+  }
+  return payload;
+}
+
+/** M→P 串联检索：按正文里的项目线索在指定仓库找相关文件。 */
+export async function routeMToPSerial(markdown, coordinate, config, fetcher = globalThis.fetch) {
+  const proxy = (config?.proxy_url ?? '').replace(/\/+$/u, '');
+  const sharecode = config?.sharecode ?? '';
+  if (!proxy || !sharecode) {
+    throw new LibraryConfigError('GITHUB_PROXY_REQUIRED', '请先在 P 库高级设置填写代理地址与访问码。');
+  }
+  if (!coordinate || !coordinate.includes('/')) {
+    throw new LibraryConfigError('COORDINATE_REQUIRED', '请先选择或填写目标仓库（owner/repo）。');
+  }
+  const token = readGithubToken();
+  const response = await fetcher(`${proxy}/mtrp/route-m-to-p-serial?sharecode=${encodeURIComponent(sharecode)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(token ? { 'x-mtrp-github-token': token } : {}) },
+    body: JSON.stringify({ markdown, coordinate }),
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new LibraryConfigError('ROUTE_FAILED', payload?.message ?? `检索失败（HTTP ${response.status}）。`);
   }
   return payload;
 }
