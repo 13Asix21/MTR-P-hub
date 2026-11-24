@@ -49,6 +49,8 @@ def load_dotenv(path: Path | None = None) -> None:
 load_dotenv()
 
 LEXIANG_ENDPOINT = os.environ.get("MTRP_LEXIANG_ENDPOINT", "https://mcp.lexiang-app.com/mcp")
+# 企业版乐享（另一组织）：端点带 company_from，凭据独立。
+LEXIANG_COMPANY_ENDPOINT = os.environ.get("MTRP_LEXIANG_COMPANY_ENDPOINT", "")
 GITHUB_MCP_ENDPOINT = os.environ.get("MTRP_GITHUB_MCP_ENDPOINT", "https://api.githubcopilot.com/mcp/")
 MAX_BODY_BYTES = 2 * 1024 * 1024
 ALLOWED_ORIGINS = os.environ.get(
@@ -607,6 +609,120 @@ def github_read_file(owner: str, repo: str, path: str, ref: str = "", explicit_t
     return {"ok": True, "transport": "mcp", "path": path, "content": payload["text"]}
 
 
+async def _list_children_async(session: Any, parent_id: str) -> list[dict[str, Any]]:
+    result = await session.call_tool(
+        "call_tool", arguments={"tool_name": "entry_list_children", "arguments": {"parent_id": parent_id}}
+    )
+    try:
+        data = json.loads(_text(result))
+    except json.JSONDecodeError:
+        return []
+    return (data.get("data") or {}).get("entries") or []
+
+
+def resolve_company_folder(raw_path: str, space_id: str = "") -> dict[str, Any]:
+    """在企业乐享空间里按路径定位**已存在**目录，只读、不创建。"""
+    token = os.environ.get("MTRP_LEXIANG_COMPANY_TOKEN", "").strip()
+    endpoint = LEXIANG_COMPANY_ENDPOINT.strip()
+    if not token or not endpoint:
+        raise TransferError(
+            503, "COMPANY_TOKEN_MISSING",
+            "未配置企业乐享凭据（MTRP_LEXIANG_COMPANY_TOKEN / MTRP_LEXIANG_COMPANY_ENDPOINT）。",
+        )
+    target_space = space_id or os.environ.get("MTRP_LEXIANG_COMPANY_SPACE", "").strip()
+    if not target_space:
+        raise TransferError(400, "SPACE_REQUIRED", "缺少 space_id。")
+
+    from _routing.lexiang_path import PathResolveError, resolve_existing_path
+
+    async def run() -> dict[str, Any]:
+        from mcp import ClientSession
+
+        auth = {"Authorization": f"Bearer {token}"}
+        async with _select_opener_at(endpoint, auth)() as streams:
+            read, write = streams[0], streams[1]
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                space = await session.call_tool("lexiang_fetch", arguments={"resource": "space", "id": target_space})
+                try:
+                    node = (json.loads(_text(space)).get("data") or {}).get("space") or {}
+                except json.JSONDecodeError:
+                    node = {}
+                root_id = node.get("root_entry_id") or ""
+                if not root_id:
+                    raise TransferError(404, "SPACE_NOT_FOUND", "取不到知识库 root_entry_id。")
+                # 逐层解析改为「先把整棵树按需拉取到内存」，再交给纯同步解析器，
+                # 彻底避免事件循环嵌套问题。
+                collected: dict[str, list[dict[str, Any]]] = {}
+
+                async def prefetch(parent_id: str, depth: int) -> None:
+                    if depth > 8 or parent_id in collected:
+                        return
+                    entries = await _list_children_async(session, parent_id)
+                    collected[parent_id] = entries
+                    for entry in entries:
+                        if str(entry.get("entry_type")) == "folder":
+                            await prefetch(str(entry.get("id")), depth + 1)
+
+                # 只预取路径经过的分支，避免整库遍历
+                current = root_id
+                for _segment in [seg for seg in raw_path.replace(">", "/").split("/") if seg.strip()]:
+                    if current in collected:
+                        break
+                    entries = await _list_children_async(session, current)
+                    collected[current] = entries
+                    normalized = " ".join(str(_segment).split())
+                    hit = next(
+                        (e for e in entries if " ".join(str(e.get("name") or "").split()) == normalized),
+                        None,
+                    )
+                    if hit is None:
+                        break
+                    current = str(hit.get("id"))
+
+                try:
+                    resolved = resolve_existing_path(
+                        lambda pid: collected.get(pid, []),
+                        root_id,
+                        raw_path,
+                    )
+                except PathResolveError as error:
+                    # 在协程内抛出会被 MCP 的 TaskGroup 包成不可读的 ExceptionGroup，
+                    # 因此这里返回结构化错误，由外层按 404 处理。
+                    return {
+                        "ok": False,
+                        "_resolve_error": True,
+                        "code": error.code,
+                        "message": error.message,
+                    }
+                return {
+                    "ok": True,
+                    "space_name": node.get("name") or "",
+                    "space_id": target_space,
+                    "root_entry_id": root_id,
+                    "entry_id": resolved.entry_id,
+                    "name": resolved.name,
+                    "depth": resolved.depth,
+                    "path": resolved.path,
+                    "message": f"已定位：{resolved.path}（entry_id={resolved.entry_id}）",
+                }
+
+    try:
+        result = asyncio.run(run())
+        if isinstance(result, dict) and result.get("_resolve_error"):
+            raise TransferError(404, str(result.get("code")), str(result.get("message")))
+        return result
+    except TransferError:
+        raise
+    except BaseExceptionGroup as group:  # noqa: F821  (3.11+)
+        for inner in group.exceptions:
+            if isinstance(inner, TransferError):
+                raise inner from None
+        raise TransferError(502, "RESOLVE_FAILED", str(group.exceptions[0])[:200]) from None
+    except Exception as error:
+        raise TransferError(502, "RESOLVE_FAILED", str(error)[:200]) from None
+
+
 def _tree_searcher(token: str):
     """把目录树检索包装成 serial 宿主需要的 PTreeSearch 形态。
 
@@ -870,6 +986,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
             except Exception as error:  # pragma: no cover
                 self._send(502, {"ok": False, "code": "GITHUB_FAILED", "message": str(error)[:200]})
+            return
+        if self._route() == "/mtrp/lexiang-resolve":
+            import urllib.parse
+            query = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+            path = (query.get("path") or [""])[0]
+            space = (query.get("space_id") or [""])[0]
+            try:
+                self._send(200, resolve_company_folder(path, space))
+            except TransferError as error:
+                self._send(error.status, {"ok": False, "code": error.code, "message": error.message})
+            except Exception as error:  # pragma: no cover
+                self._send(502, {"ok": False, "code": "RESOLVE_FAILED", "message": str(error)[:200]})
             return
         if self._route() == "/mtrp/github-repos":
             token = self.headers.get("X-MTRP-GitHub-Token", "").strip()
