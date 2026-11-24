@@ -2,7 +2,7 @@
 
 ## 当前交付边界
 
-本目录是零构建、无运行时 CDN 的静态浏览器审核工作台。用户主动授权一个本地目录后，页面**递归只读扫描整个 Obsidian 库**内所有子文件夹的 Markdown（默认整库，兼容 PARA、Zettelkasten、扁平与纯中文结构），支持筛选、原文详情、通过/拒绝/跳过/撤销、理由、快捷键、单批不超过 500 篇，以及 JSON+CSV 浏览器下载。`.obsidian`、`.trash`、`.git`、`.github`、`.obsidian-git` 自动排除。不再要求库内存在 `2-Permanent`。
+本目录是零构建、无运行时 CDN 的静态浏览器审核工作台。用户主动授权一个本地目录后，页面**递归只读扫描整个 Obsidian 库**内所有子文件夹的 Markdown（默认整库，兼容 PARA、Zettelkasten、扁平与纯中文结构），支持筛选、原文详情、通过/拒绝/跳过/撤销、理由、快捷键、单批不超过 500 篇，以及 JSON+CSV 浏览器下载。除 Markdown 外，PDF / DOCX / XLSX 与图片也会进入队列但**仅可预览、不可审核**（无 frontmatter，无法判定入库资格）。`.obsidian`、`.trash`、`.git`、`.github`、`.obsidian-git` 自动排除。不再要求库内存在 `2-Permanent`。
 
 **“在线版”指静态页面形态，不代表账号或云同步。** 当前身份只有“本地浏览器档案”；审核记录、目录句柄和导出备份只保存在当前 Origin 的 IndexedDB。没有 Auth、跨设备同步、云台账、云 SDK、服务端扫描或自动发布。审核不会改写 Vault 原文。
 
@@ -47,10 +47,28 @@ https://mtrp-review-workbench.app.workbuddy.host/?sharecode=R6JHCUP2WX
 - **凭据不落云端**：面板只保存地址与标识（乐享 `space_id`、GitHub `owner/repo/branch`、Obsidian 目录与标签、可选代理地址）。填写 `token` / `secret` / `password` 等字段会被直接拒绝。
 - **各库可达性**：
   - Obsidian（T/R）：配置只保存目录与标签；**目录读取授权仍保存在本机浏览器**，不随账号同步。
-  - GitHub（P）：公开仓库可由浏览器直连 `api.github.com` 并「测试连接」；私有仓库需填代理。
+  - GitHub（P）：**已改为经官方 MCP 服务访问**（`api.githubcopilot.com/mcp/`），由代理转发，不再直连 REST。
+    - 「加载我的仓库」会列出该 Token 可访问的**全部仓库，含私有**（实测 7 个）。
+    - Token 只存本机 localStorage，不写入云端；未配代理会明确报 `GITHUB_PROXY_REQUIRED`，不做匿名兜底。
   - 乐享（M）：浏览器直连被 CORS 拦截，必须经服务端代理（可参考 `agent-bridge` 的独立服务实现）；未填代理时状态明确显示不可用。
 - **未登录写入**会被 RLS 静默过滤，前端把"返回 0 行"当作失败并提示重新登录，不伪报成功。
 - 云服务只在正式发布域生效；`localhost` 与预览地址会被 OAuth Relay 拒绝，这属于平台边界。
+
+## M→P 路由（从笔记关联 GitHub）
+
+审核详情页的「关联 P 库」面板提供两种查法：
+
+| 功能 | 入口 | 原理 |
+| --- | --- | --- |
+| 引用补全 | `#route-refs` | 解析正文里**显式**的 GitHub 链接，取回文件内容 |
+| 串联检索 | `#route-serial` | 从正文提取项目线索，在仓库目录树里匹配路径 |
+
+接口：`POST /mtrp/route-m-to-p`（引用补全）、`POST /mtrp/route-m-to-p-serial`（串联检索），均在代理侧。
+
+设计约束：
+- **不识别裸 `owner/repo`**：与本地路径（如 `2-Permanent/note.md`）无法区分，误判比漏判更糟。
+- 串联检索受网关 60 秒上限约束，采用**按层并发**（8 路）+ 120 条目预算，实测约 20 秒。
+- 代理自包含：路由逻辑复制在 `apps/mtrp-proxy/_routing/`，由 `tests/test_routing_mirror.py` 校验与主仓一致，防止漂移。
 
 ## 隐私与安全
 
