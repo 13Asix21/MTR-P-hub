@@ -15,11 +15,18 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 import re
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+
+
+# 仓库根 src 加入路径，使 mtrp_hub 的纯路由逻辑可被复用（同一套规则，不另写一份）。
+_SRC = Path(__file__).resolve().parents[2] / "src"
+if _SRC.is_dir() and str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 
 def load_dotenv(path: Path | None = None) -> None:
@@ -486,6 +493,72 @@ def github_read_file(owner: str, repo: str, path: str, ref: str = "", explicit_t
     return {"ok": True, "transport": "mcp", "path": path, "content": payload["text"]}
 
 
+def _mcp_github_call(token: str):
+    """把 GitHub MCP 调用包装成 route 宿主需要的 call(tool, arguments) 形态。
+
+    需要保留 resource 项的原文：GitHub 把文件正文放在 resource.text 里，
+    而 text 项只是 "successfully downloaded ..." 回执。这里直接返回 MCP 的
+    content 数组，交给 McpFileReader 按类型解析。
+    """
+    from mcp import ClientSession
+
+    def call(tool: str, arguments: dict[str, Any]) -> list[dict[str, Any]]:
+        async def run() -> list[dict[str, Any]]:
+            auth = {"Authorization": f"Bearer {token}"}
+            async with _select_opener_at(GITHUB_MCP_ENDPOINT, auth)() as streams:
+                read, write = streams[0], streams[1]
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.call_tool(tool, arguments=arguments)
+                    if getattr(result, "isError", False):
+                        raise TransferError(502, "GITHUB_MCP_ERROR", _text(result)[:200] or f"{tool} 调用失败")
+                    return [
+                        item.model_dump(mode="json") if hasattr(item, "model_dump") else dict(item)
+                        for item in result.content
+                    ]
+
+        return asyncio.run(run())
+
+    return call
+
+
+def route_m_to_p(markdown: str, explicit_token: str = "", max_items: int = 20) -> dict[str, Any]:
+    """M→P 引用补全：解析正文里的 GitHub 引用并取回对应文件。
+
+    没有引用时返回 ok=true、fetched 为空，不视为错误；
+    有引用但取不到时返回 degraded=true，已取到的照常返回。
+    """
+    if not isinstance(markdown, str) or not markdown.strip():
+        raise TransferError(400, "MARKDOWN_REQUIRED", "缺少 markdown 正文。")
+    token = github_token(explicit_token)
+
+    from mtrp_hub.routing.host import execute_reference_route
+    from mtrp_hub.routing.mcp_reader import McpFileReader
+
+    outcome = execute_reference_route(
+        markdown,
+        McpFileReader(_mcp_github_call(token)),
+        max_items=max_items,
+    )
+    summary = outcome.summary()
+    return {
+        "ok": True,
+        "transport": "mcp",
+        "degraded": summary["degraded"],
+        "fetched_count": summary["fetched_count"],
+        "missing_count": summary["missing_count"],
+        "repos": summary["repos"],
+        "files": summary["fetched"],
+        "missing": summary["missing"],
+        "message": (
+            f"补全 {summary['fetched_count']} 个文件"
+            + (f"，{summary['missing_count']} 个未取到" if summary["missing_count"] else "")
+            if summary["total"]
+            else "正文中没有可定位的 GitHub 引用"
+        ),
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     """最小 HTTP 处理器：健康检查、CORS 预检、传送。"""
 
@@ -609,7 +682,8 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, {"ok": False, "message": "未知路径。"})
 
     def do_POST(self) -> None:  # noqa: N802
-        if self._route() != "/mtrp/transfer":
+        route = self._route()
+        if route not in ("/mtrp/transfer", "/mtrp/route-m-to-p"):
             self._send(404, {"ok": False, "message": "未知路径。"})
             return
         if self._origin() is None:
@@ -621,6 +695,14 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if route == "/mtrp/route-m-to-p":
+                result = route_m_to_p(
+                    payload.get("markdown", ""),
+                    self.headers.get("X-MTRP-GitHub-Token", "").strip(),
+                    int(payload.get("max_items") or 20),
+                )
+                self._send(200, result)
+                return
             req = parse_request(payload, os.environ.get("MTRP_LEXIANG_SPACE_ID", ""))
             outcome = asyncio.run(transfer(req, _require_token()))
         except TransferError as error:
