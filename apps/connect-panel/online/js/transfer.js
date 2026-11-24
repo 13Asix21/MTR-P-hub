@@ -4,7 +4,7 @@
  * 浏览器无法直连乐享 MCP（CORS 被拦），所以必须经用户配置的服务端代理。
  * 这里只发「标题 + 正文 + 目标」的最小载荷；不发 token，代理自己持有凭据。
  */
-import { LibraryConfigError } from './librarySettings.js?v=20261124f';
+import { LibraryConfigError } from './librarySettings.js?v=20261124h';
 
 export const TRANSFER_PATH = '/mtrp/transfer';
 
@@ -52,6 +52,11 @@ export async function transferApprovedNote({ path, detail, library, session }, f
   if (!sha) throw new LibraryConfigError('SHA_MISSING', '缺少当前内容 SHA，请重新打开详情后再传送。');
   const { frontmatter, body } = splitForTransfer(rawText);
   const sharecode = proxySharecode(library);
+
+  // 公司库目标：走 company-transfer（定位已有目录 + 序号命名 + 回读校验）
+  if ((library?.target ?? 'personal') === 'company') {
+    return transferToCompany({ path, detail, library, sharecode, rawText, sha }, fetcher);
+  }
   if (!sharecode) throw new LibraryConfigError('SHARECODE_REQUIRED', '请在在线设置里填写乐享代理的 sharecode（在代理分享链接里）。');
   // 已经是规范的代理路径就不再重复拼接，避免出现 /mtrp/transfer/mtrp/transfer。
   const base = library.proxy_url.replace(/\/+$/u, '');
@@ -100,5 +105,48 @@ export async function transferApprovedNote({ path, detail, library, session }, f
     message: payload?.entry_id
       ? `已整篇传入 M 库：空间 ${library.space_id} · ${target}（条目 ${payload.entry_id}${sizeText}）${nameText}${warn}`
       : `已整篇传入 M 库：空间 ${library.space_id} · ${target}。`,
+  };
+}
+
+/**
+ * 传送到公司乐享的**指定已有文件夹**。
+ * 与个人库不同：目标是已存在的目录路径，文件名按「前缀-序号-标题」生成。
+ */
+export async function transferToCompany({ path, detail, library, sharecode, rawText, sha }, fetcher = globalThis.fetch) {
+  const proxy = (library.proxy_url ?? '').replace(/\/+$/u, '');
+  const folderPath = (library.company_path ?? '').trim();
+  if (!folderPath) throw new LibraryConfigError('COMPANY_PATH_REQUIRED', '请先在 M 库设置里填写公司库目标文件夹。');
+  const endpoint = `${proxy}/mtrp/company-transfer?sharecode=${encodeURIComponent(sharecode)}`;
+  let response;
+  try {
+    response = await fetcher(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mtrp-sharecode': sharecode },
+      body: JSON.stringify({
+        markdown: rawText,
+        folder_path: folderPath,
+        title: noteTitle(path),
+        content_sha256: sha,
+        prefix: library.name_prefix ?? '',
+      }),
+    });
+  } catch (error) {
+    throw new LibraryConfigError('PROXY_UNREACHABLE', `无法连接代理：${String(error?.message ?? error).slice(0, 80)}`);
+  }
+  const payload = await response.json().catch(() => null);
+  if (response.status === 403) throw new LibraryConfigError('SHARECODE_REJECTED', '代理拒绝了访问：访问码不正确。');
+  if (!response.ok || !payload?.ok) {
+    throw new LibraryConfigError(payload?.code ?? 'COMPANY_TRANSFER_FAILED', payload?.message ?? `传送失败（HTTP ${response.status}）。`);
+  }
+  const verify = payload.verify ?? {};
+  const verifyText = verify.checked
+    ? (verify.byte_identical ? '，回读字节一致' : '，但回读字节不一致，请人工核对')
+    : '，回读校验未完成';
+  return {
+    ok: true,
+    entryId: payload.entry_id,
+    bytes: payload.bytes,
+    target: 'company',
+    message: `已传送到公司乐享：${payload.folder_path}（${payload.file_name}${verifyText}）`,
   };
 }

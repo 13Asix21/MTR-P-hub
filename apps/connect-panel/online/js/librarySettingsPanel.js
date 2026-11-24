@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261124f';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261124h';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -11,10 +11,11 @@ import {
   loadConnections,
   normalizeConfig,
   listGithubRepos,
+  resolveCompanyFolder,
   saveConnection,
   testConnection,
-} from './librarySettings.js?v=20261124f';
-import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, extractSpaceId, toFormValues } from './libraryFields.js?v=20261124f';
+} from './librarySettings.js?v=20261124h';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, extractSpaceId, toFormValues } from './libraryFields.js?v=20261124h';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -244,9 +245,18 @@ export class LibrarySettingsPanel {
     this.forms = {};
     for (const library of LIBRARIES) {
       const saved = this.entries[library.id];
-      this.forms[library.id] = saved.saved
-        ? toFormValues(library.id, saved.config)
-        : defaultsFor(library.id);
+      if (saved.saved) {
+        // 旧配置可能缺少后来新增的字段；用字段默认值补齐，避免显示为空。
+        this.forms[library.id] = { ...defaultsFor(library.id), ...toFormValues(library.id, saved.config) };
+        for (const [key, value] of Object.entries(this.forms[library.id])) {
+          if (value === '' || value === undefined || value === null) {
+            const fallback = defaultsFor(library.id)[key];
+            if (fallback) this.forms[library.id][key] = fallback;
+          }
+        }
+      } else {
+        this.forms[library.id] = defaultsFor(library.id);
+      }
       // 本机凭据不来自云端，从本地读回填。
       if (library.id === 'p') this.forms.p.github_token = this.readLocalField('github_token');
     }
@@ -278,6 +288,7 @@ export class LibrarySettingsPanel {
     const row = el(this.document, 'div', '', advanced ? 'settings-field is-advanced' : 'settings-field');
     row.dataset.field = field.key;
     if (field.onlyMode) row.dataset.onlyMode = field.onlyMode;
+    if (field.onlyTarget) row.dataset.onlyTarget = field.onlyTarget;
     const head = el(this.document, 'div', '', 'settings-field-head');
     const label = el(this.document, 'label', field.label + (field.required ? ' *' : ''), 'settings-label');
     label.setAttribute('for', id);
@@ -302,6 +313,7 @@ export class LibrarySettingsPanel {
       input.addEventListener('change', () => {
         this.forms[library][field.key] = input.value;
         this.applyModeVisibility(library);
+        this.applyTargetVisibility(library);
       });
     } else {
       input = el(this.document, 'input', '', 'text-input');
@@ -320,6 +332,16 @@ export class LibrarySettingsPanel {
     row.append(head, input);
     if (field.helpText) row.append(el(this.document, 'p', field.helpText, 'field-help'));
     return row;
+  }
+
+  /** M 库按传送目标（个人 / 公司）显隐字段。 */
+  applyTargetVisibility(library) {
+    const card = this.cardNode(library);
+    if (!card) return;
+    const target = this.forms[library]?.target ?? 'personal';
+    for (const row of card.querySelectorAll('[data-only-target]')) {
+      row.hidden = row.dataset.onlyTarget !== target;
+    }
   }
 
   /** 本地 / MCP 二选一时，只显示当前模式相关的字段。 */
@@ -409,6 +431,32 @@ export class LibrarySettingsPanel {
     return box;
   }
 
+  renderCompanyPathCheck() {
+    const box = el(this.document, 'div', '', 'path-check');
+    box.dataset.onlyTargetBox = 'company';
+    const row = el(this.document, 'div', '', 'settings-paster-row');
+    const btn = button(this.document, '校验目标文件夹', 'secondary-button', async () => {
+      msg.textContent = '正在定位…';
+      msg.className = 'field-help';
+      try {
+        const r = await resolveCompanyFolder(this.forms.m.company_path ?? '', this.forms.m.proxy_url, this.forms.m.sharecode);
+        msg.textContent = r.message;
+        msg.className = 'field-help settings-ok';
+        box.dataset.resolved = r.entry_id ?? '';
+      } catch (error) {
+        msg.textContent = error?.message ?? '定位失败。';
+        msg.className = 'field-help settings-error';
+        box.dataset.resolved = '';
+      }
+    });
+    btn.id = 'm-check-company-path';
+    const msg = el(this.document, 'p', '', 'field-help');
+    row.append(btn);
+    box.append(row, msg);
+    box.append(el(this.document, 'p', '只读校验：不会创建目录、不会写入文件。', 'field-help'));
+    return box;
+  }
+
   renderCard(library) {
     const entry = this.entries[library.id];
     const card = el(this.document, 'section', '', 'settings-card');
@@ -427,6 +475,8 @@ export class LibrarySettingsPanel {
     card.append(fields);
     // 乐享：支持直接粘贴知识库链接自动识别 ID，避免手抄 32 位字符串出错。
     if (library.id === 'm') card.append(this.renderSpaceIdPaster());
+    // 公司库：提供「校验目标文件夹」按钮，只读确认路径能定位到具体目录。
+    if (library.id === 'm') card.append(this.renderCompanyPathCheck());
     // GitHub：经 MCP 列出账号下全部仓库，点选即填，不用手抄 owner/repo。
     if (library.id === 'p') card.append(this.renderRepoPicker());
 
@@ -447,7 +497,12 @@ export class LibrarySettingsPanel {
     const result = el(this.document, 'p', '', 'settings-result');
     result.dataset.role = 'result';
     card.append(result);
-    queueMicrotask(() => this.applyModeVisibility(library.id));
+    queueMicrotask(() => {
+      this.applyModeVisibility(library.id);
+      this.applyTargetVisibility(library.id);
+      const box = this.cardNode(library.id)?.querySelector('.path-check');
+      if (box) box.hidden = (this.forms[library.id]?.target ?? 'personal') !== 'company';
+    });
     return card;
   }
 
@@ -581,7 +636,7 @@ export class LibrarySettingsPanel {
     if (btn) btn.disabled = true;
     host.hidden = false;
     host.replaceChildren();
-    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261124f');
+    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261124h');
     const results = [];
     const render = () => {
       host.replaceChildren();
@@ -601,7 +656,7 @@ export class LibrarySettingsPanel {
       try {
         if (step.id === 'm') {
           entry.message = checkM(this.entries.m?.config).message;
-          const { testConnection } = await import('./librarySettings.js?v=20261124f');
+          const { testConnection } = await import('./librarySettings.js?v=20261124h');
           const r = await testConnection('m', this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
@@ -614,7 +669,7 @@ export class LibrarySettingsPanel {
           const cfg = this.entries.p?.config;
           const chk = checkGithub(cfg);
           if (chk.state === STEP_STATE.ok) {
-            const { checkGithubAccess } = await import('./librarySettings.js?v=20261124f');
+            const { checkGithubAccess } = await import('./librarySettings.js?v=20261124h');
             const r = await checkGithubAccess(cfg);
             entry.message = r.message;
             if (!r.writable) entry.state = STEP_STATE.ok;
@@ -623,7 +678,7 @@ export class LibrarySettingsPanel {
           }
           entry.state = chk.state;
         } else {
-          const { testAgent } = await import('./librarySettings.js?v=20261124f');
+          const { testAgent } = await import('./librarySettings.js?v=20261124h');
           const r = await testAgent(this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;

@@ -3,7 +3,7 @@
  * 安全边界：云端只存「连接地址与标识」，绝不存 token / AppSecret；
  * 需要凭据的读取（乐享 M、私有 GitHub）必须走各自的服务端代理，不能把密钥放进浏览器。
  */
-import { LIBRARIES } from './cloudClient.js?v=20261124f';
+import { LIBRARIES } from './cloudClient.js?v=20261124h';
 
 export const LIBRARY_IDS = LIBRARIES.map((item) => item.id);
 export const TABLE = 'library_connections';
@@ -335,6 +335,20 @@ export async function routeMToPSerial(markdown, coordinate, config, fetcher = gl
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {
     throw new LibraryConfigError('ROUTE_FAILED', payload?.message ?? `检索失败（HTTP ${response.status}）。`);
+  }
+  return payload;
+}
+
+/** 公司乐享目录定位（只读校验，不创建不写入）。 */
+export async function resolveCompanyFolder(folderPath, proxyUrl, sharecode, fetcher = globalThis.fetch) {
+  const proxy = (proxyUrl ?? '').replace(/\/+$/u, '');
+  if (!proxy) throw new LibraryConfigError('PROXY_REQUIRED', '请先填写代理地址。');
+  if (!folderPath || !folderPath.trim()) throw new LibraryConfigError('PATH_REQUIRED', '请填写公司库目标文件夹路径。');
+  const url = `${proxy}/mtrp/lexiang-resolve?sharecode=${encodeURIComponent(sharecode ?? '')}&path=${encodeURIComponent(folderPath)}`;
+  const response = await fetcher(url, { headers: { accept: 'application/json' } });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    throw new LibraryConfigError(payload?.code ?? 'RESOLVE_FAILED', payload?.message ?? `定位失败（HTTP ${response.status}）。`);
   }
   return payload;
 }

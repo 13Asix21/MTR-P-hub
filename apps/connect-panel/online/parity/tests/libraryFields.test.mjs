@@ -51,9 +51,19 @@ test('每个必填项都提供了获取引导或默认值', () => {
   }
 });
 
-test('M 库常规字段只有两项，代理细节收进高级', () => {
-  assert.equal(FIELD_HELP.m.length, 2);
+test('M 库常规字段含目标切换，代理细节仍收进高级', () => {
+  const keys = FIELD_HELP.m.map((f) => f.key);
+  assert.deepEqual(keys, ['target', 'space_id', 'path', 'company_path', 'name_prefix']);
+  assert.equal(FIELD_HELP.m[0].defaultValue, 'personal', '默认走个人库');
   assert.deepEqual(ADVANCED_FIELDS.m.map((f) => f.key), ['proxy_url', 'sharecode']);
+});
+
+test('公司库字段只在 target=company 时显示', () => {
+  const byKey = Object.fromEntries(FIELD_HELP.m.map((f) => [f.key, f]));
+  assert.equal(byKey.company_path.onlyTarget, 'company');
+  assert.equal(byKey.name_prefix.onlyTarget, 'company');
+  assert.equal(byKey.path.onlyTarget, 'personal');
+  assert.equal(byKey.space_id.onlyTarget, undefined, '知识库 ID 两种目标共用');
 });
 
 test('T/R 没有高级字段，界面不会出现空折叠', () => {

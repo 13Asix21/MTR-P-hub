@@ -6,6 +6,19 @@
 export const FIELD_HELP = {
   m: [
     {
+      key: 'target',
+      label: '传送到哪里',
+      type: 'select',
+      options: [
+        { value: 'personal', label: '个人乐享（M库范式）' },
+        { value: 'company', label: '公司乐享（软件开发课 → 自动化软件组）' },
+      ],
+      required: true,
+      defaultValue: 'personal',
+      helpText: '切换目标后，下面填的路径含义随之改变。',
+      helpLink: null,
+    },
+    {
       key: 'space_id',
       label: '乐享知识库',
       placeholder: '选择或粘贴知识库 ID',
@@ -17,12 +30,33 @@ export const FIELD_HELP = {
     },
     {
       key: 'path',
-      label: '放进哪个文件夹',
-      placeholder: '留空 = 知识库根目录',
+      label: '放进哪个文件夹（个人库）',
+      placeholder: '留空 = 知识库根目录；不存在会自动创建',
       required: false,
       defaultValue: '',
-      helpText: '填相对路径即可，代理会自动逐级建文件夹。',
+      helpText: '个人库模式：填相对路径，代理会自动逐级建文件夹。',
       helpLink: null,
+      onlyTarget: 'personal',
+    },
+    {
+      key: 'company_path',
+      label: '公司库目标文件夹（多级路径）',
+      placeholder: '01 - 研发项目/06 PED烧靶位置视觉检测引导【负责人：李元伯】',
+      required: false,
+      defaultValue: '01 - 研发项目/06 PED烧靶位置视觉检测引导【负责人：李元伯】',
+      helpText: '公司库模式：必须是**已存在**的文件夹，逐级精确匹配，找不到会报错而不是新建。',
+      helpLink: { label: '打开公司知识库', url: 'https://lexiangla.com/spaces/10cf12a04dd04d30bc99098d42884ce5?company_from=cc1fd0fe844a11f1adb492769ecf71fc' },
+      onlyTarget: 'company',
+    },
+    {
+      key: 'name_prefix',
+      label: '文件名前缀（公司库）',
+      placeholder: 'PED',
+      required: false,
+      defaultValue: 'PED',
+      helpText: '公司库按「前缀-序号-标题」命名；目录为空时从此前缀从 01 起编号。',
+      helpLink: null,
+      onlyTarget: 'company',
     },
   ],
   t: [
@@ -174,8 +208,11 @@ export const ADVANCED_FIELDS = {
 export function buildConfig(library, values) {
   if (library === 'm') {
     return {
+      target: (values.target ?? 'personal').trim() || 'personal',
       space_id: (values.space_id ?? '').trim(),
       path: (values.path ?? '').trim(),
+      company_path: (values.company_path ?? '').trim(),
+      name_prefix: (values.name_prefix ?? '').trim(),
       proxy_url: (values.proxy_url ?? '').trim(),
       sharecode: (values.sharecode ?? '').trim(),
     };
@@ -206,8 +243,11 @@ export function buildConfig(library, values) {
 export function toFormValues(library, config = {}) {
   if (library === 'm') {
     return {
+      target: config.target ?? 'personal',
       space_id: config.space_id ?? '',
       path: config.path ?? '',
+      company_path: config.company_path ?? '',
+      name_prefix: config.name_prefix ?? '',
       proxy_url: config.proxy_url ?? '',
       sharecode: config.sharecode ?? '',
     };

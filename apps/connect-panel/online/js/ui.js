@@ -1,10 +1,10 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261124f';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261124f';
-import { downloadExportPair } from './export.js?v=20261124f';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261124h';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261124h';
+import { downloadExportPair } from './export.js?v=20261124h';
 import { routeMToP, routeMToPSerial } from './librarySettings.js';
-import { PREVIEW_KIND, blobUrl, describeDocx, describeXlsx, detectKind, formatSize } from './filePreview.js?v=20261124f';
-import { renderNotePreview } from './markdownPreview.js?v=20261124f';
-import { transferApprovedNote } from './transfer.js?v=20261124f';
+import { PREVIEW_KIND, blobUrl, describeDocx, describeXlsx, detectKind, formatSize } from './filePreview.js?v=20261124h';
+import { renderNotePreview } from './markdownPreview.js?v=20261124h';
+import { transferApprovedNote } from './transfer.js?v=20261124h';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -199,7 +199,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261124f');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261124h');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -219,7 +219,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261124f');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261124h');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -258,9 +258,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261124f');
-      const { loadConnections } = await import('./librarySettings.js?v=20261124f');
-      const { currentSession } = await import('./cloudClient.js?v=20261124f');
+      const { getCloud } = await import('./cloudClient.js?v=20261124h');
+      const { loadConnections } = await import('./librarySettings.js?v=20261124h');
+      const { currentSession } = await import('./cloudClient.js?v=20261124h');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -630,7 +630,8 @@ export class WorkbenchUi {
       const row = element(this.document, 'div', '', 'flow-actions');
       const targetText = this.describeTransferTarget();
       row.append(element(this.document, 'span', targetText, 'flow-target'));
-      const send = button(this.document, '传送到 M 库', 'primary-button', () => this.transferToLibrary());
+      const isCompany = (this.mLibraryConfig?.target ?? 'personal') === 'company';
+      const send = button(this.document, isCompany ? '传送到公司库' : '传送到 M 库', 'primary-button', () => this.transferToLibrary());
       send.id = 'transfer-to-m';
       row.append(send);
       const hint = element(this.document, 'span', '', 'flow-hint');
@@ -909,6 +910,10 @@ export class WorkbenchUi {
   describeTransferTarget() {
     const config = this.mLibraryConfig;
     if (!this.transferConfigLoaded) return '目标：正在读取在线设置中的 M 库配置…';
+    if ((config?.target ?? 'personal') === 'company') {
+      const folder = config.company_path || '（未填写目标文件夹）';
+      return `目标：公司乐享 · ${folder}`;
+    }
     if (!config || !config.space_id) return '目标：M 库（乐享知识库），尚未配置空间 ID';
     const path = config.path ? `/${String(config.path).replace(/^\/+/u, '')}` : '（知识库根目录）';
     return `目标：M 库（乐享知识库）· 空间 ${config.space_id} · 路径 ${path}`;
@@ -917,6 +922,9 @@ export class WorkbenchUi {
   canTransfer() {
     const config = this.mLibraryConfig;
     // 会话在点击传送时再校验（transfer.js 内会拒绝未登录），避免详情先渲染、会话后到的时序问题。
+    if ((config?.target ?? 'personal') === 'company') {
+      return Boolean(config?.company_path && config?.proxy_url && config?.sharecode && this.services.transferToLibrary);
+    }
     return Boolean(config?.space_id && config?.proxy_url && config?.sharecode && this.services.transferToLibrary);
   }
 
