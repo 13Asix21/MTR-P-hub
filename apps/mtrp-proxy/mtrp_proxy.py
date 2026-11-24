@@ -23,10 +23,11 @@ from pathlib import Path
 from typing import Any
 
 
-# 仓库根 src 加入路径，使 mtrp_hub 的纯路由逻辑可被复用（同一套规则，不另写一份）。
-_SRC = Path(__file__).resolve().parents[2] / "src"
-if _SRC.is_dir() and str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+# 代理必须自包含：部署包只上传本目录，不能依赖仓库根 src/。
+# 纯路由逻辑（references/serial）已随包放入本目录，见同目录 _routing/。
+_LOCAL = Path(__file__).resolve().parent
+if str(_LOCAL) not in sys.path:
+    sys.path.insert(0, str(_LOCAL))
 
 
 def load_dotenv(path: Path | None = None) -> None:
@@ -423,6 +424,119 @@ def github_scope(explicit_token: str = "") -> dict[str, Any]:
     }
 
 
+def github_list_dir(owner: str, repo: str, path: str = "", explicit_token: str = "") -> list[dict[str, Any]]:
+    """经 MCP 列举目录内容；path 为空表示仓库根。"""
+    token = github_token(explicit_token)
+    args: dict[str, Any] = {"owner": owner, "repo": repo, "path": path}
+    payload = asyncio.run(github_mcp_call("get_file_contents", args, token))
+    import json as _json
+    raw = payload["text"]
+    try:
+        data = _json.loads(raw)
+    except _json.JSONDecodeError:
+        return []
+    items = data if isinstance(data, list) else []
+    result: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        result.append({
+            "name": item.get("name"),
+            "path": item.get("path"),
+            "type": item.get("type"),  # file | dir
+            "size": item.get("size"),
+        })
+    return result
+
+
+# 串联检索要频繁列目录，必须复用同一个 MCP 会话，否则每次都重新握手会超时。
+_SEARCH_MAX_ENTRIES = 120
+_SEARCH_MAX_DEPTH = 3
+_SEARCH_CONCURRENCY = 8
+_SEARCH_SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "dist", "build", ".pytest_cache", ".workbuddy"}
+
+
+def github_search_paths(
+    owner: str,
+    repo: str,
+    keyword: str,
+    explicit_token: str = "",
+    max_depth: int = _SEARCH_MAX_DEPTH,
+    max_entries: int = _SEARCH_MAX_ENTRIES,
+) -> list[dict[str, Any]]:
+    """在一个 MCP 会话里遍历仓库目录树，按关键词匹配路径。
+
+    复用单会话是关键：每次调用单独握手会拖到超时。
+    跳过 .git/node_modules 等目录，并按 max_entries 限制访问量。
+    """
+    keyword_lower = (keyword or "").strip().lower()
+    if not keyword_lower:
+        return []
+    token = github_token(explicit_token)
+    return asyncio.run(_search_paths_async(owner, repo, keyword_lower, token, max_depth, max_entries))
+
+
+async def _search_paths_async(
+    owner: str,
+    repo: str,
+    keyword: str,
+    token: str,
+    max_depth: int,
+    max_entries: int,
+) -> list[dict[str, Any]]:
+    from mcp import ClientSession
+
+    auth = {"Authorization": f"Bearer {token}"}
+    matched: list[dict[str, Any]] = []
+    visited = 0
+
+    async def list_dir(session: Any, path: str) -> list[dict[str, Any]]:
+        result = await session.call_tool(
+            "get_file_contents", arguments={"owner": owner, "repo": repo, "path": path}
+        )
+        if getattr(result, "isError", False):
+            return []
+        raw = _text(result)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        return data if isinstance(data, list) else []
+
+    async with _select_opener_at(GITHUB_MCP_ENDPOINT, auth)() as streams:
+        read, write = streams[0], streams[1]
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            queue: list[tuple[str, int]] = [("", 0)]
+            while queue and visited < max_entries:
+                current, depth = queue.pop(0)
+                if depth > max_depth:
+                    continue
+                entries = await list_dir(session, current)
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    visited += 1
+                    if visited >= max_entries:
+                        break
+                    path = str(entry.get("path") or "")
+                    kind = entry.get("type")
+                    name = str(entry.get("name") or "")
+                    if kind == "dir":
+                        if name in _SEARCH_SKIP_DIRS:
+                            continue
+                        queue.append((path, depth + 1))
+                        continue
+                    lower = path.lower()
+                    if not lower.endswith((".md", ".py", ".yaml", ".yml", ".json", ".txt", ".toml")):
+                        continue
+                    if keyword in lower:
+                        score = 2 if keyword in lower.rsplit("/", 1)[-1] else 1
+                        matched.append({"path": path, "size": entry.get("size"), "score": score})
+    matched.sort(key=lambda item: (-int(item["score"]), str(item["path"])))
+    return matched[:20]
+
+
 def github_list_repos(explicit_token: str = "", limit: int = 100) -> dict[str, Any]:
     """经 MCP 列出当前 token 可访问的全部仓库（分页合并）。"""
     token = github_token(explicit_token)
@@ -493,6 +607,139 @@ def github_read_file(owner: str, repo: str, path: str, ref: str = "", explicit_t
     return {"ok": True, "transport": "mcp", "path": path, "content": payload["text"]}
 
 
+def _tree_searcher(token: str):
+    """把目录树检索包装成 serial 宿主需要的 PTreeSearch 形态。
+
+    关键优化：同一轮路由的所有关键词共用**一次**目录遍历与会话，
+    否则每个关键词各开一次 MCP 连接，6 个关键词会握手 6 次直接超时。
+    """
+
+    class _Searcher:
+        def __init__(self) -> None:
+            self._cache: dict[str, list[dict[str, Any]]] | None = None
+            self._keywords: list[str] = []
+            self._all_paths: list[str] | None = None
+
+        def search_paths(self, owner: str, repo: str, keyword: str):
+            # 首次调用时遍历一次并缓存全部路径，后续关键词只做本地匹配。
+            if self._all_paths is None:
+                self._all_paths = asyncio.run(_collect_paths_async(owner, repo, token))
+            kw = (keyword or "").strip().lower()
+            if not kw:
+                return []
+            hits = []
+            for path in self._all_paths:
+                lower = path.lower()
+                if kw in lower:
+                    score = 2 if kw in lower.rsplit("/", 1)[-1] else 1
+                    hits.append({"path": path, "score": score})
+            hits.sort(key=lambda item: (-item["score"], item["path"]))
+            return hits[:20]
+
+    return _Searcher()
+
+
+async def _collect_paths_async(owner: str, repo: str, token: str) -> list[str]:
+    """并行遍历仓库目录树收集可检索路径。
+
+    网关对单次请求有 60s 上限，串行列目录会超时；
+    这里按层并发（默认 8 路），并把访问量压到预算内。
+    """
+    from mcp import ClientSession
+
+    auth = {"Authorization": f"Bearer {token}"}
+    paths: list[str] = []
+    budget = {"left": _SEARCH_MAX_ENTRIES}
+
+    async def list_dir(session: Any, path: str) -> list[dict[str, Any]]:
+        try:
+            result = await session.call_tool(
+                "get_file_contents", arguments={"owner": owner, "repo": repo, "path": path}
+            )
+        except Exception:
+            return []
+        if getattr(result, "isError", False):
+            return []
+        try:
+            data = json.loads(_text(result))
+        except json.JSONDecodeError:
+            return []
+        return data if isinstance(data, list) else []
+
+    async with _select_opener_at(GITHUB_MCP_ENDPOINT, auth)() as streams:
+        read, write = streams[0], streams[1]
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            level: list[str] = [""]
+            depth = 0
+            while level and depth <= _SEARCH_MAX_DEPTH and budget["left"] > 0:
+                semaphore = asyncio.Semaphore(_SEARCH_CONCURRENCY)
+
+                async def one(current: str) -> list[dict[str, Any]]:
+                    async with semaphore:
+                        return await list_dir(session, current)
+
+                results = await asyncio.gather(*(one(item) for item in level))
+                next_level: list[str] = []
+                for entries in results:
+                    for entry in entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        budget["left"] -= 1
+                        if budget["left"] < 0:
+                            break
+                        path = str(entry.get("path") or "")
+                        if entry.get("type") == "dir":
+                            if str(entry.get("name") or "") not in _SEARCH_SKIP_DIRS:
+                                next_level.append(path)
+                            continue
+                        if path.lower().endswith((".md", ".py", ".yaml", ".yml", ".json", ".txt", ".toml")):
+                            paths.append(path)
+                level = next_level
+                depth += 1
+    return paths
+
+
+def route_m_to_p_serial(
+    markdown: str,
+    coordinate: str,
+    explicit_token: str = "",
+    max_hints: int = 6,
+) -> dict[str, Any]:
+    """M→P 串联检索：按正文里的项目线索在仓库目录树里找相关文件。"""
+    if not isinstance(markdown, str) or not markdown.strip():
+        raise TransferError(400, "MARKDOWN_REQUIRED", "缺少 markdown 正文。")
+    if not coordinate or "/" not in coordinate:
+        raise TransferError(400, "COORDINATE_REQUIRED", "需要 coordinate，形如 owner/repo。")
+    token = github_token(explicit_token)
+
+    from _routing.serial import execute_serial_route
+
+    outcome = execute_serial_route(
+        markdown,
+        coordinate,
+        _tree_searcher(token),
+        max_hints=max_hints,
+    )
+    summary = outcome.summary()
+    return {
+        "ok": True,
+        "transport": "mcp",
+        "mode": "serial",
+        "degraded": summary["degraded"],
+        "coordinate": coordinate,
+        "keywords": [h["keyword"] for h in summary["hints"]],
+        "hit_count": summary["hit_count"],
+        "hits": summary["hits"],
+        "errors": summary["errors"],
+        "message": (
+            f"按线索匹配到 {summary['hit_count']} 个文件"
+            if summary["hit_count"]
+            else "没有从正文里找到可用于检索的项目线索，或仓库里没有匹配路径"
+        ),
+    }
+
+
 def _mcp_github_call(token: str):
     """把 GitHub MCP 调用包装成 route 宿主需要的 call(tool, arguments) 形态。
 
@@ -532,8 +779,8 @@ def route_m_to_p(markdown: str, explicit_token: str = "", max_items: int = 20) -
         raise TransferError(400, "MARKDOWN_REQUIRED", "缺少 markdown 正文。")
     token = github_token(explicit_token)
 
-    from mtrp_hub.routing.host import execute_reference_route
-    from mtrp_hub.routing.mcp_reader import McpFileReader
+    from _routing.host import execute_reference_route
+    from _routing.mcp_reader import McpFileReader
 
     outcome = execute_reference_route(
         markdown,
@@ -683,7 +930,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         route = self._route()
-        if route not in ("/mtrp/transfer", "/mtrp/route-m-to-p"):
+        if route not in ("/mtrp/transfer", "/mtrp/route-m-to-p", "/mtrp/route-m-to-p-serial"):
             self._send(404, {"ok": False, "message": "未知路径。"})
             return
         if self._origin() is None:
@@ -695,6 +942,15 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if route == "/mtrp/route-m-to-p-serial":
+                result = route_m_to_p_serial(
+                    payload.get("markdown", ""),
+                    str(payload.get("coordinate") or ""),
+                    self.headers.get("X-MTRP-GitHub-Token", "").strip(),
+                    int(payload.get("max_hints") or 6),
+                )
+                self._send(200, result)
+                return
             if route == "/mtrp/route-m-to-p":
                 result = route_m_to_p(
                     payload.get("markdown", ""),
