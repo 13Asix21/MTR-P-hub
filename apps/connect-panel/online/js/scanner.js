@@ -1,4 +1,4 @@
-import { sha256Bytes } from './hasher.js?v=20261124h';
+import { sha256Bytes } from './hasher.js?v=20261124j';
 import {
   MarkdownParseError,
   compareCodePoints,
@@ -7,7 +7,7 @@ import {
   parseDocumentSync,
   splitFrontmatter,
   splitLines,
-} from './parser.js?v=20261124h';
+} from './parser.js?v=20261124j';
 
 /**
  * 默认扫描整个 Obsidian 库根目录（`.`）。各类 Para / Zettelkasten / 扁平结构都能兼容，
@@ -41,8 +41,8 @@ export class ScanError extends Error {
 }
 
 /** Python str.casefold 的完整 Unicode 兼容实现；普通字符走 JS lower-case。 */
-export { pythonCasefold as casefold } from './pythonCasefold.js?v=20261124h';
-import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261124h';
+export { pythonCasefold as casefold } from './pythonCasefold.js?v=20261124j';
+import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261124j';
 
 export function normalizeRoot(rawRoot, field) {
   if (typeof rawRoot !== 'string' || !rawRoot.trim()) {
@@ -389,15 +389,16 @@ export async function walkCollect(adapter, options = {}) {
       const category = classifyByName(entry.name);
       if (category === 'ignore') continue;
       if (category === 'preview-node') {
-        // 仅预览格式：只登记基本信息，不做正文解析与标签识别。
+        // 非 Markdown 文件：可参与审核，但因没有 frontmatter，标签为空、分类标记为 no_frontmatter。
+        // 仍保留 preview_kind，供详情页选择合适的预览渲染方式。
         facts.push({
           relative_posix: relative,
           size_bytes: entry.size,
           mtime: entry.mtime ?? '',
           content_sha256: '',
           tags: [],
-          classification: 'preview_only',
-          parse_status: 'PREVIEW_ONLY',
+          classification: 'no_frontmatter',
+          parse_status: 'NO_FRONTMATTER',
           error_code: '',
           error_message: '',
           preview_kind: fileExtension(entry.name),

@@ -1,10 +1,10 @@
-import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261124h';
-import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261124h';
-import { downloadExportPair } from './export.js?v=20261124h';
+import { computeProgress, emptyState, REVIEW_BATCH_MAX_ITEMS, reviewStatusFor } from './reviewDomain.js?v=20261124j';
+import { applyBatch, localProfileStatus } from './reviewWorkflow.js?v=20261124j';
+import { downloadExportPair } from './export.js?v=20261124j';
 import { routeMToP, routeMToPSerial } from './librarySettings.js';
-import { PREVIEW_KIND, blobUrl, describeDocx, describeXlsx, detectKind, formatSize } from './filePreview.js?v=20261124h';
-import { renderNotePreview } from './markdownPreview.js?v=20261124h';
-import { transferApprovedNote } from './transfer.js?v=20261124h';
+import { PREVIEW_KIND, blobUrl, describeDocx, describeXlsx, detectKind, formatSize } from './filePreview.js?v=20261124j';
+import { renderNotePreview } from './markdownPreview.js?v=20261124j';
+import { transferApprovedNote } from './transfer.js?v=20261124j';
 
 /** 创建安全 DOM 节点；所有外部动态值只能走 textContent。 */
 export function element(documentRef, tag, text = '', className = '') {
@@ -199,7 +199,7 @@ export class WorkbenchUi {
 
   /** 流转说明：与设置共用同一个浮层，避免两套弹窗。 */
   async openFlowGuide() {
-    const { FlowExplainer } = await import('./flowExplainer.js?v=20261124h');
+    const { FlowExplainer } = await import('./flowExplainer.js?v=20261124j');
     const host = this.ensureSettingsOverlay();
     host.replaceChildren();
     const close = button(this.document, '✕', 'settings-close', () => this.closeSettings());
@@ -219,7 +219,7 @@ export class WorkbenchUi {
 
   /** 打开设置面板；host 是插入点，未指定时浮在右上角面板里。 */
   async openSettings(host = null) {
-    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261124h');
+    const { LibrarySettingsPanel } = await import('./librarySettingsPanel.js?v=20261124j');
     const target = host ?? this.ensureSettingsOverlay();
     if (!this.settingsPanel) {
       this.settingsPanel = new LibrarySettingsPanel(this.document, { onClose: () => this.closeSettings() });
@@ -258,9 +258,9 @@ export class WorkbenchUi {
   /** 读取云端 M 库配置（未登录或失败时返回 null，不阻塞页面）。 */
   async loadMLibraryConfig() {
     try {
-      const { getCloud } = await import('./cloudClient.js?v=20261124h');
-      const { loadConnections } = await import('./librarySettings.js?v=20261124h');
-      const { currentSession } = await import('./cloudClient.js?v=20261124h');
+      const { getCloud } = await import('./cloudClient.js?v=20261124j');
+      const { loadConnections } = await import('./librarySettings.js?v=20261124j');
+      const { currentSession } = await import('./cloudClient.js?v=20261124j');
       const { session } = await currentSession();
       if (!session) return null;
       this.session = session;
@@ -435,8 +435,17 @@ export class WorkbenchUi {
     if (!list) return;
     list.replaceChildren();
     const items = this.visibleItems();
+    if (this.statusFilter === 'nofm') {
+      const nofm = this.listing.items.filter((item) => item.parse_status === 'NO_FRONTMATTER'
+        && (!this.filter.toLocaleLowerCase() || item.vault_relative_path.toLocaleLowerCase().includes(this.filter.toLocaleLowerCase())));
+      list.append(this.batchControls(nofm));
+      this.renderRows(list, nofm);
+      return;
+    }
     if (this.statusFilter === 'invalid') {
       const invalid = this.listing.items.filter((item) => item.parse_status !== 'ok'
+        && item.parse_status !== 'NO_FRONTMATTER'
+        && item.parse_status !== 'PREVIEW_ONLY'
         && (!this.filter.toLocaleLowerCase() || item.vault_relative_path.toLocaleLowerCase().includes(this.filter.toLocaleLowerCase())));
       list.append(this.batchControls(invalid));
       this.renderRows(list, invalid);
@@ -520,7 +529,7 @@ export class WorkbenchUi {
       pathCell.append(open);
       const status = item.parse_status === 'FILE_TOO_LARGE' ? 'too_large' : reviewStatusFor(this.state.items[path], item.sha256);
       const statusText = { pending: '未审', approved: '通过', rejected: '拒绝', skipped: '跳过', stale: '内容已变更', too_large: '超限不可审' }[status]
-        ?? (item.parse_status === 'PREVIEW_ONLY' ? '仅预览' : status);
+        ?? (item.parse_status === 'NO_FRONTMATTER' ? '无标签' : status);
       // 传送状态列：让「是否已入库」一眼可见。
       const sent = this.transferredPaths.has(path);
       const transferCell = element(this.document, 'td', sent ? '✓ 已传送' : (status === 'approved' ? '待传送' : '—'), sent ? 'transfer-cell is-sent' : 'transfer-cell');
@@ -576,22 +585,18 @@ export class WorkbenchUi {
     reason.setAttribute('aria-label', '审核理由');
     reason.value = detail.decision?.reason ?? '';
     const actions = element(this.document, 'div', '', 'detail-actions');
-    const previewOnly = detail.item.parse_status === 'PREVIEW_ONLY';
+    const noFrontmatter = detail.item.parse_status === 'NO_FRONTMATTER'
+      || detail.item.parse_status === 'PREVIEW_ONLY';
     for (const [action, label, key] of [['approved', '通过 (A)', 'a'], ['rejected', '拒绝 (R)', 'r'], ['skipped', '跳过 (S)', 's'], ['undo', '撤销 (U)', 'u']]) {
       const control = button(this.document, label, 'secondary-button', () => this.performAction(action));
       control.dataset.action = action;
       control.dataset.key = key;
-      // 仅预览格式没有 frontmatter，不参与审核，禁用以防误写台账。
-      if (previewOnly) {
-        control.disabled = true;
-        control.title = '该格式不支持审核，仅供预览';
-      } else if (action === 'undo') {
-        control.disabled = !detail.decision;
-      }
+      // 非 Markdown 也可审核；没有 frontmatter 只是无法按标签归类，不影响人工判断。
+      if (action === 'undo') control.disabled = !detail.decision;
       actions.append(control);
     }
-    if (previewOnly) {
-      actions.append(element(this.document, 'span', '仅预览格式（不参与审核）', 'preview-only-badge'));
+    if (noFrontmatter) {
+      actions.append(element(this.document, 'span', '无 frontmatter（按内容人工审核）', 'preview-only-badge'));
     }
     this.detailPanel.append(reason, actions);
 
@@ -1014,10 +1019,6 @@ export class WorkbenchUi {
         detail = await this.actionService.detail(item, this.state);
       }
       if (!item || !detail || detail.item.vault_relative_path !== path) return false;
-      if (detail.item.parse_status === 'PREVIEW_ONLY') {
-        this.setNotice('该文件是仅预览格式（PDF/DOCX/XLSX 等），不支持审核，也不会进入 M 库。');
-        return false;
-      }
       if (['FILE_READ_FAILED', 'FILE_TOO_LARGE', 'INVALID_ENCODING'].includes(detail.item.parse_status)) {
         this.setNotice('该篇没有可核验的有效原始字节，不能审核；请修复或重新扫描可读文件。');
         return false;

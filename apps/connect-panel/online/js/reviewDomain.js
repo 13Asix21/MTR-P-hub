@@ -1,4 +1,4 @@
-import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261124h';
+import { pythonCasefold as casefold } from './pythonCasefold.js?v=20261124j';
 
 export const REVIEW_HISTORY_LIMIT = 200;
 export const REVIEW_REASON_MAX_CHARS = 500;

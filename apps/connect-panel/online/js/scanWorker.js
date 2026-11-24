@@ -1,5 +1,5 @@
-import { compareCodePoints } from './parser.js?v=20261124h';
-import { classifyByName, collectListing, compactScannedFact, DEFAULT_EXCLUDED_ROOTS, DEFAULT_MANAGED_ROOTS, fileExtension, isExcluded, MAX_FILE_BYTES, MAX_SCAN_FILES, normalizeRoots, casefold } from './scanner.js?v=20261124h';
+import { compareCodePoints } from './parser.js?v=20261124j';
+import { classifyByName, collectListing, compactScannedFact, DEFAULT_EXCLUDED_ROOTS, DEFAULT_MANAGED_ROOTS, fileExtension, isExcluded, MAX_FILE_BYTES, MAX_SCAN_FILES, normalizeRoots, casefold } from './scanner.js?v=20261124j';
 
 // 本文件只在浏览器 Worker 或 Node 测试中执行；fileHandle 始终是只读句柄。
 const workerScope = typeof self === 'undefined' ? null : self;
@@ -7,7 +7,7 @@ if (workerScope && typeof window === 'undefined') workerScope.onmessage = async 
   const { id, fileHandle, relative, mtime, size } = event.data;
   try {
     const bytes = new Uint8Array(await (await fileHandle.getFile()).arrayBuffer());
-    const { scanFileBytes } = await import('./scanner.js?v=20261124h');
+    const { scanFileBytes } = await import('./scanner.js?v=20261124j');
     const fact = await scanFileBytes(relative, bytes, { size_bytes: size, mtime, maxFileBytes: MAX_FILE_BYTES });
     fact.raw_bytes = [];
     workerScope.postMessage({ id, fact });
@@ -100,8 +100,8 @@ export async function scanVaultWithWorkers(root, options = {}) {
             mtime: entry.mtime,
             content_sha256: '',
             tags: [],
-            classification: 'preview_only',
-            parse_status: 'PREVIEW_ONLY',
+            classification: 'no_frontmatter',
+            parse_status: 'NO_FRONTMATTER',
             error_code: '',
             error_message: '',
             preview_kind: entry.previewKind,

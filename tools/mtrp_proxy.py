@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 import re
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -370,10 +371,17 @@ def github_token(explicit: str = "") -> str:
 
 
 def github_check(owner: str, repo: str, explicit_token: str = "") -> dict[str, Any]:
-    """经 MCP 探查仓库：存在性、可见性、默认分支。"""
+    """经 MCP 探查仓库：存在性、可见性、默认分支。
+
+    结果缓存 120 秒：测试连接是高频动作，MCP 单次约 15s，缓存后几乎瞬时。
+    """
     if not owner or not repo:
         raise TransferError(400, "REPO_REQUIRED", "缺少 owner 或 repo。")
     token = github_token(explicit_token)
+    cache_id = _cache_key("check", owner, repo, token[-8:])
+    cached = _cache_get(cache_id)
+    if cached is not None:
+        return {**cached, "cached": True}
     try:
         payload = asyncio.run(github_mcp_call(
             "search_repositories", {"query": f"repo:{owner}/{repo}"}, token))
@@ -394,7 +402,7 @@ def github_check(owner: str, repo: str, explicit_token: str = "") -> dict[str, A
     match = next((item for item in items if str(item.get("full_name", "")).lower() == f"{owner}/{repo}".lower()), None)
     if not match:
         raise TransferError(404, "GITHUB_NOT_FOUND", "仓库不存在，或当前 token 无访问权限。")
-    return {
+    result = {
         "ok": True,
         "transport": "mcp",
         "full_name": match.get("full_name"),
@@ -406,6 +414,7 @@ def github_check(owner: str, repo: str, explicit_token: str = "") -> dict[str, A
             f"连接正常（MCP）：{match.get('full_name')}（{'私有' if match.get('private') else '公开'}）"
         ),
     }
+    return _cache_put(cache_id, result)
 
 
 def github_scope(explicit_token: str = "") -> dict[str, Any]:
@@ -542,6 +551,10 @@ async def _search_paths_async(
 def github_list_repos(explicit_token: str = "", limit: int = 100) -> dict[str, Any]:
     """经 MCP 列出当前 token 可访问的全部仓库（分页合并）。"""
     token = github_token(explicit_token)
+    cache_id = _cache_key("repos", token[-8:], limit)
+    cached = _cache_get(cache_id)
+    if cached is not None:
+        return {**cached, "cached": True}
     repos: list[dict[str, Any]] = []
     page = 1
     while page <= 10 and len(repos) < limit:
@@ -579,13 +592,13 @@ def github_list_repos(explicit_token: str = "", limit: int = 100) -> dict[str, A
         if len(items) < 100:
             break
         page += 1
-    return {
+    return _cache_put(cache_id, {
         "ok": True,
         "transport": "mcp",
         "count": len(repos),
         "repos": repos,
         "message": f"经 MCP 读到 {len(repos)} 个仓库",
-    }
+    })
 
 
 def github_branches(owner: str, repo: str, explicit_token: str = "") -> dict[str, Any]:
@@ -1010,6 +1023,33 @@ def route_m_to_p_serial(
             else "没有从正文里找到可用于检索的项目线索，或仓库里没有匹配路径"
         ),
     }
+
+
+# ---------------------------------------------------------------- GitHub 缓存
+# 实测：单次调用 ~15s，其中握手 1.3s、首次查询 5.5s、后续仅 1.5s。
+# 因此两件事最有效：①短 TTL 缓存 ②失败也短暂缓存，避免反复超时。
+_GITHUB_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_GITHUB_CACHE_TTL = float(os.environ.get("MTRP_GITHUB_CACHE_TTL", "120"))
+
+
+def _cache_get(key: str) -> dict[str, Any] | None:
+    entry = _GITHUB_CACHE.get(key)
+    if not entry:
+        return None
+    expires, value = entry
+    if time.monotonic() > expires:
+        _GITHUB_CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _cache_put(key: str, value: dict[str, Any], ttl: float | None = None) -> dict[str, Any]:
+    _GITHUB_CACHE[key] = (time.monotonic() + (ttl or _GITHUB_CACHE_TTL), value)
+    return value
+
+
+def _cache_key(*parts: Any) -> str:
+    return "|".join(str(p) for p in parts)
 
 
 def _mcp_github_call(token: str):

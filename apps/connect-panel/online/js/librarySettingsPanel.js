@@ -2,7 +2,7 @@
  * 在线设置面板：登录 + 按用户编辑四库连接。
  * 未登录时只展示说明，不读写任何用户数据。
  */
-import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261124h';
+import { LIBRARIES, cloudAvailable, clearCallbackParams, currentSession, getCloud } from './cloudClient.js?v=20261124j';
 import {
   LibraryConfigError,
   deleteConnection,
@@ -14,8 +14,8 @@ import {
   resolveCompanyFolder,
   saveConnection,
   testConnection,
-} from './librarySettings.js?v=20261124h';
-import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, extractSpaceId, toFormValues } from './libraryFields.js?v=20261124h';
+} from './librarySettings.js?v=20261124j';
+import { ADVANCED_FIELDS, FIELD_HELP, buildConfig, defaultsFor, extractSpaceId, toFormValues } from './libraryFields.js?v=20261124j';
 
 function el(document, tag, text = '', className = '') {
   const node = document.createElement(tag);
@@ -405,7 +405,7 @@ export class LibrarySettingsPanel {
       msg.className = 'field-help settings-ok';
     });
     const load = button(this.document, '加载我的仓库', 'secondary-button', async () => {
-      msg.textContent = '正在经 MCP 读取仓库列表…';
+      msg.replaceChildren(el(this.document, 'span', '', 'spinner'), el(this.document, 'span', ' 正在经 MCP 读取仓库列表…'));
       msg.className = 'field-help';
       try {
         const config = buildConfig('p', this.forms.p);
@@ -530,6 +530,26 @@ export class LibrarySettingsPanel {
     node.classList.toggle('settings-ok', !isError && text.length > 0);
   }
 
+  /** 测试连接期间显示转圈并禁用动作按钮，避免重复点击。 */
+  setCardLoading(library, loading, hint = '') {
+    const card = this.cardNode(library);
+    if (!card) return;
+    card.classList.toggle('is-loading', loading);
+    const node = card.querySelector('[data-role="result"]');
+    if (node) {
+      if (loading) {
+        node.replaceChildren(el(this.document, 'span', '', 'spinner'), el(this.document, 'span', ` ${hint || '正在检查连接…'}`));
+        node.classList.remove('settings-error', 'settings-ok');
+      } else if (!node.querySelector('.spinner')) {
+        node.textContent = '';
+      }
+    }
+    for (const btn of card.querySelectorAll('.settings-actions button')) {
+      // 保存/测试/删除在请求期间都禁止，防止并发改配置。
+      btn.disabled = loading;
+    }
+  }
+
   persistLocalField(key, value) {
     if (key !== 'github_token') return;
     try {
@@ -594,11 +614,16 @@ export class LibrarySettingsPanel {
     const saved = await this.save(library);
     if (!saved) return;
     this.busy = true;
-    this.setCardMessage(library, '测试中…');
+    // GitHub 走 MCP，单次约 15 秒（握手 + 冷启动），必须给出明显等待反馈。
+    const slow = library === 'p' || library === 'm';
+    this.setCardLoading(library, true, slow ? '正在经 MCP 检查，首次约 10–20 秒…' : '正在检查连接…');
     try {
       const result = await testConnection(library, saved.config);
-      this.setCardMessage(library, result.message);
+      this.setCardLoading(library, false);
+      const cached = result.detail?.cached ? '（缓存结果）' : '';
+      this.setCardMessage(library, `${result.message}${cached}`);
     } catch (error) {
+      this.setCardLoading(library, false);
       this.setCardMessage(library, error?.message ?? '测试失败。', true);
     } finally {
       this.busy = false;
@@ -636,7 +661,7 @@ export class LibrarySettingsPanel {
     if (btn) btn.disabled = true;
     host.hidden = false;
     host.replaceChildren();
-    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261124h');
+    const { WORKFLOW_STEPS, STEP_STATE, checkM, checkVault, checkGithub, summarize } = await import('./connectivityWorkflow.js?v=20261124j');
     const results = [];
     const render = () => {
       host.replaceChildren();
@@ -656,7 +681,7 @@ export class LibrarySettingsPanel {
       try {
         if (step.id === 'm') {
           entry.message = checkM(this.entries.m?.config).message;
-          const { testConnection } = await import('./librarySettings.js?v=20261124h');
+          const { testConnection } = await import('./librarySettings.js?v=20261124j');
           const r = await testConnection('m', this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
@@ -669,7 +694,7 @@ export class LibrarySettingsPanel {
           const cfg = this.entries.p?.config;
           const chk = checkGithub(cfg);
           if (chk.state === STEP_STATE.ok) {
-            const { checkGithubAccess } = await import('./librarySettings.js?v=20261124h');
+            const { checkGithubAccess } = await import('./librarySettings.js?v=20261124j');
             const r = await checkGithubAccess(cfg);
             entry.message = r.message;
             if (!r.writable) entry.state = STEP_STATE.ok;
@@ -678,7 +703,7 @@ export class LibrarySettingsPanel {
           }
           entry.state = chk.state;
         } else {
-          const { testAgent } = await import('./librarySettings.js?v=20261124h');
+          const { testAgent } = await import('./librarySettings.js?v=20261124j');
           const r = await testAgent(this.entries.m?.config ?? {});
           entry.state = STEP_STATE.ok;
           entry.message = r.message;
