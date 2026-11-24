@@ -723,6 +723,162 @@ def resolve_company_folder(raw_path: str, space_id: str = "") -> dict[str, Any]:
         raise TransferError(502, "RESOLVE_FAILED", str(error)[:200]) from None
 
 
+async def _company_import(
+    session: Any,
+    parent_id: str,
+    content: str,
+    title: str,
+    existing_names: list[str],
+    default_prefix: str,
+) -> dict[str, Any]:
+    """在企业空间写入：先按同目录惯例算名字，再导入并改名。"""
+    from _routing.naming import plan_indexed_name
+
+    plan = plan_indexed_name(title, existing_names, default_prefix=default_prefix)
+    imported = await import_markdown(session, parent_id, content, plan.name)
+    return {
+        "entry_id": imported["entry_id"],
+        "bytes": imported["bytes"],
+        "renamed": imported["renamed"],
+        "warning": imported.get("warning"),
+        "file_name": plan.name,
+        "naming": plan.summary(),
+    }
+
+
+def transfer_company(
+    markdown: str,
+    folder_path: str,
+    title: str,
+    content_sha256: str = "",
+    default_prefix: str = "",
+    space_id: str = "",
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """在企业乐享空间的**指定已有文件夹**里写入一篇笔记（B1）。
+
+    与 `route_m_to_p` 那类只读接口不同，本函数会真实写入。
+    流程：定位目录 → 按同目录惯例算序号名 → 导入 → 回读校验字节一致。
+    """
+    token = os.environ.get("MTRP_LEXIANG_COMPANY_TOKEN", "").strip()
+    endpoint = LEXIANG_COMPANY_ENDPOINT.strip()
+    if not token or not endpoint:
+        raise TransferError(503, "COMPANY_TOKEN_MISSING", "未配置企业乐享凭据。")
+    if not isinstance(markdown, str) or not markdown.strip():
+        raise TransferError(400, "MARKDOWN_REQUIRED", "缺少 markdown 正文。")
+    target_space = space_id or os.environ.get("MTRP_LEXIANG_COMPANY_SPACE", "").strip()
+    if not target_space:
+        raise TransferError(400, "SPACE_REQUIRED", "缺少 space_id。")
+
+    from _routing.lexiang_path import PathResolveError, resolve_existing_path
+
+    async def run() -> dict[str, Any]:
+        from mcp import ClientSession
+
+        auth = {"Authorization": f"Bearer {token}"}
+        async with _select_opener_at(endpoint, auth)() as streams:
+            read, write = streams[0], streams[1]
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                space = await session.call_tool("lexiang_fetch", arguments={"resource": "space", "id": target_space})
+                try:
+                    node = (json.loads(_text(space)).get("data") or {}).get("space") or {}
+                except json.JSONDecodeError:
+                    node = {}
+                root_id = node.get("root_entry_id") or ""
+                if not root_id:
+                    raise TransferError(404, "SPACE_NOT_FOUND", "取不到知识库 root_entry_id。")
+
+                # 1) 沿路径预取，供纯同步解析器使用（避免事件循环嵌套）
+                collected: dict[str, list[dict[str, Any]]] = {}
+                current = root_id
+                for segment in [x for x in folder_path.replace(">", "/").split("/") if x.strip()]:
+                    entries = await _list_children_async(session, current)
+                    collected[current] = entries
+                    wanted = " ".join(segment.split())
+                    hit = next(
+                        (e for e in entries if " ".join(str(e.get("name") or "").split()) == wanted),
+                        None,
+                    )
+                    if hit is None:
+                        break
+                    current = str(hit.get("id"))
+
+                try:
+                    resolved = resolve_existing_path(lambda pid: collected.get(pid, []), root_id, folder_path)
+                except PathResolveError as error:
+                    return {"ok": False, "_resolve_error": True, "code": error.code, "message": error.message}
+
+                # 2) 取目标目录现有条目（用于命名与重名判断）
+                names = [str(e.get("name") or "") for e in await _list_children_async(session, resolved.entry_id)]
+
+                # 3) 写入
+                written = await _company_import(
+                    session, resolved.entry_id, markdown, title, names, default_prefix
+                )
+
+                # 4) 回读校验：下载后比对字节长度与 SHA
+                verify: dict[str, Any] = {"checked": False}
+                try:
+                    detail = await session.call_tool(
+                        "lexiang_fetch", arguments={"resource": "entry", "id": written["entry_id"]}
+                    )
+                    entry = (json.loads(_text(detail)).get("data") or {}).get("entry") or {}
+                    file_id = entry.get("target_id")
+                    if file_id:
+                        dl = await session.call_tool(
+                            "call_tool", arguments={"tool_name": "file_download_file", "arguments": {"file_id": file_id}}
+                        )
+                        url = (json.loads(_text(dl)).get("data") or {}).get("url")
+                        if url:
+                            import hashlib
+                            import urllib.request
+
+                            with urllib.request.urlopen(url, timeout=30) as resp:
+                                got = resp.read()
+                            local = markdown.encode("utf-8")
+                            verify = {
+                                "checked": True,
+                                "local_bytes": len(local),
+                                "remote_bytes": len(got),
+                                "byte_identical": got == local,
+                                "remote_sha256": hashlib.sha256(got).hexdigest(),
+                            }
+                except Exception as error:  # 回读失败不否定写入，但要如实标注
+                    verify = {"checked": False, "error": str(error)[:120]}
+
+                return {
+                    "ok": True,
+                    "space_id": target_space,
+                    "space_name": node.get("name") or "",
+                    "folder_path": resolved.path,
+                    "parent_entry_id": resolved.entry_id,
+                    "entry_id": written["entry_id"],
+                    "file_name": written["file_name"],
+                    "naming": written["naming"],
+                    "bytes": written["bytes"],
+                    "renamed": written["renamed"],
+                    "content_sha256": content_sha256,
+                    "verify": verify,
+                    "url": f"https://lexiangla.com/pages/{written['entry_id']}",
+                }
+
+    try:
+        result = asyncio.run(run())
+        if isinstance(result, dict) and result.get("_resolve_error"):
+            raise TransferError(404, str(result.get("code")), str(result.get("message")))
+        return result
+    except TransferError:
+        raise
+    except BaseExceptionGroup as group:  # noqa: F821
+        for inner in group.exceptions:
+            if isinstance(inner, TransferError):
+                raise inner from None
+        raise TransferError(502, "COMPANY_WRITE_FAILED", str(group.exceptions[0])[:200]) from None
+    except Exception as error:
+        raise TransferError(502, "COMPANY_WRITE_FAILED", str(error)[:200]) from None
+
+
 def _tree_searcher(token: str):
     """把目录树检索包装成 serial 宿主需要的 PTreeSearch 形态。
 
@@ -1058,7 +1214,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         route = self._route()
-        if route not in ("/mtrp/transfer", "/mtrp/route-m-to-p", "/mtrp/route-m-to-p-serial"):
+        if route not in ("/mtrp/transfer", "/mtrp/route-m-to-p", "/mtrp/route-m-to-p-serial", "/mtrp/company-transfer"):
             self._send(404, {"ok": False, "message": "未知路径。"})
             return
         if self._origin() is None:
@@ -1070,6 +1226,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if route == "/mtrp/company-transfer":
+                result = transfer_company(
+                    payload.get("markdown", ""),
+                    str(payload.get("folder_path") or ""),
+                    str(payload.get("title") or "未命名笔记"),
+                    str(payload.get("content_sha256") or ""),
+                    str(payload.get("prefix") or ""),
+                    str(payload.get("space_id") or ""),
+                    bool(payload.get("overwrite")),
+                )
+                self._send(200, result)
+                return
             if route == "/mtrp/route-m-to-p-serial":
                 result = route_m_to_p_serial(
                     payload.get("markdown", ""),
